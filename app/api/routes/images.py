@@ -1,0 +1,1 @@
+# Todas as rotas relacionadas a imagens removidas conforme solicitado 

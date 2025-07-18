@@ -1,0 +1,51 @@
+# Orquestração da aplicação + banco de dados
+
+version: "3.8"
+
+services:
+  # Banco de dados PostgreSQL
+  postgres:
+    image: postgres:15
+    container_name: image_classification_db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - app_network
+
+  # Aplicação FastAPI
+  app:
+    build: .
+    container_name: image_classification_app
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - API_HOST=${API_HOST}
+      - API_PORT=${API_PORT}
+      - ADMIN_NOME_COMPLETO=${ADMIN_NOME_COMPLETO}
+      - ADMIN_EMAIL=${ADMIN_EMAIL}
+      - ADMIN_SENHA=${ADMIN_SENHA}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - JWT_ALGORITHM=${JWT_ALGORITHM}
+      - JWT_ACCESS_TOKEN_EXPIRE_MINUTES=${JWT_ACCESS_TOKEN_EXPIRE_MINUTES}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./images:/app/images
+      - ./app:/app/app
+    depends_on:
+      - postgres
+    networks:
+      - app_network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+networks:
+  app_network:
+    driver: bridge
