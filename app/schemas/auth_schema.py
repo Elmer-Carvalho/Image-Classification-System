@@ -57,12 +57,12 @@ class CadastroPermitidoOut(BaseModel):
             }
         }
 
-class UsuarioConvencionalCreate(BaseModel):
+class UsuarioCreate(BaseModel):
+    """Schema unificado para criação de usuários (convencionais e administradores)"""
     nome_completo: constr(strip_whitespace=True, min_length=5)
     email: EmailStr
     senha: constr(min_length=8)
     cpf: constr(min_length=11, max_length=14)
-    crm: constr(strip_whitespace=True, min_length=3, max_length=20) | None = None
 
     class Config:
         json_schema_extra = {
@@ -70,22 +70,7 @@ class UsuarioConvencionalCreate(BaseModel):
                 "nome_completo": "João da Silva",
                 "email": "joao.silva@email.com",
                 "senha": "SenhaForte123",
-                "cpf": "12345678901",
-                "crm": "12345"
-            }
-        }
-
-class UsuarioAdministradorCreate(BaseModel):
-    nome_completo: constr(strip_whitespace=True, min_length=5)
-    email: EmailStr
-    senha: constr(min_length=8)
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "nome_completo": "Maria Admin",
-                "email": "maria.admin@email.com",
-                "senha": "SenhaForte123"
+                "cpf": "12345678901"
             }
         }
 
@@ -95,7 +80,6 @@ class UsuarioOut(BaseModel):
     email: EmailStr
     tipo: str
     cpf: str | None = None
-    crm: str | None = None
     is_admin: bool
     ativo: bool
 

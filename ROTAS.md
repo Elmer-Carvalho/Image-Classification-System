@@ -1,6 +1,9 @@
 # Documentação das Rotas da API
 
-> Para autenticação, utilize o token JWT retornado em `/auth/login` no header `Authorization: Bearer <token>`.
+> Para autenticação, o sistema suporta duas formas:
+>
+> 1. **Cookies HttpOnly** (recomendado): Após login, o token é automaticamente armazenado em cookie seguro
+> 2. **Bearer Token**: Utilize o token JWT retornado em `/auth/login` no header `Authorization: Bearer <token>`
 
 ---
 
@@ -8,7 +11,7 @@
 
 ### POST /auth/login
 
-- **Descrição:** Autentica usuário e retorna JWT.
+- **Descrição:** Autentica usuário e retorna JWT. Define automaticamente cookie HttpOnly com SameSite=Lax.
 - **Payload:**
   ```json
   {
@@ -21,33 +24,28 @@
   { "access_token": "...", "token_type": "bearer" }
   ```
 
-### POST /auth/cadastro-convencional
+### POST /auth/cadastro
 
-- **Descrição:** Cadastra usuário convencional.
+- **Descrição:** Cadastra usuário (convencional ou administrador). O tipo é determinado automaticamente pelo cadastro permitido na whitelist. Define automaticamente cookie HttpOnly com SameSite=Lax.
 - **Payload:**
   ```json
   {
     "nome_completo": "João da Silva",
     "email": "joao@email.com",
     "senha": "SenhaForte123",
-    "cpf": "12345678901",
-    "crm": "12345"
+    "cpf": "12345678901"
   }
   ```
 - **Resposta:** JWT do novo usuário.
 
-### POST /auth/cadastro-administrador
+### POST /auth/logout
 
-- **Descrição:** Cadastra usuário administrador.
-- **Payload:**
+- **Descrição:** Realiza logout do usuário, removendo o cookie de autenticação.
+- **Acesso:** Usuário autenticado (via cookie ou Bearer token)
+- **Resposta:**
   ```json
-  {
-    "nome_completo": "Maria Admin",
-    "email": "maria@email.com",
-    "senha": "SenhaForte123"
-  }
+  { "message": "Logout realizado com sucesso" }
   ```
-- **Resposta:** JWT do novo admin.
 
 ---
 
@@ -56,7 +54,7 @@
 ### GET /usuarios
 
 - **Descrição:** Lista todos os usuários (admin only).
-- **Resposta:** Lista de usuários com dados básicos, tipo, status, CPF/CRM.
+- **Resposta:** Lista de usuários com dados básicos, tipo, status e CPF.
 
 ### DELETE /usuarios/{id_usu}
 

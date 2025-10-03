@@ -13,7 +13,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.core.config import settings
 from app.core.utils import hash_password
-from app.db.database import engine, get_db, SessionLocal, popular_eventos_auditoria
+from app.db.database import engine, get_db, SessionLocal, popular_eventos_auditoria, wait_for_database
 from app.db.models import Base
 from app.api.routes import auth
 from app.api.routes import usuarios
@@ -33,7 +33,14 @@ async def lifespan(app: FastAPI):
     # Startup
     global image_monitor
     
+    # Aguardar banco de dados estar pronto
+    print("🔄 Aguardando banco de dados estar pronto...")
+    if not wait_for_database():
+        print("❌ Falha ao conectar com o banco de dados. Encerrando aplicação.")
+        raise Exception("Não foi possível conectar com o banco de dados")
+    
     # Criar tabelas no banco
+    print("📊 Criando tabelas no banco de dados...")
     Base.metadata.create_all(bind=engine)
 
     # Popular eventos de auditoria após garantir que as tabelas existem
@@ -75,6 +82,7 @@ async def lifespan(app: FastAPI):
             session.flush()  # Garante que o usuário tenha ID para FK
             admin_adm = UsuarioAdministrador(
                 id_adm=uuid.uuid4(),
+                cpf=settings.ADMIN_CPF,
                 id_usu=admin_user.id_usu
             )
             session.add(admin_adm)

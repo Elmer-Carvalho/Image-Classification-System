@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Body
+from fastapi import APIRouter, Depends, HTTPException, status, Body, Request
 from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.services.auth_service import require_admin, get_current_user
@@ -103,7 +103,7 @@ def listar_vinculos_admin(admin: Usuario = Depends(require_admin), db: Session =
     return result
 
 @router.get("/meus-ambientes", response_model=UsuarioAmbienteAmbientesOut)
-def meus_ambientes(usuario: Usuario = Depends(get_current_user), db: Session = Depends(get_db)):
+def meus_ambientes(request: Request, usuario: Usuario = Depends(get_current_user), db: Session = Depends(get_db)):
     # Só permite usuário convencional
     if not usuario.convencional or not usuario.ativo:
         exc = HTTPException(status_code=403, detail="Apenas usuários convencionais ativos podem acessar seus ambientes.")

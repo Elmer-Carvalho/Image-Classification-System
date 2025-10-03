@@ -28,6 +28,7 @@ class Usuario(Base):
 class UsuarioAdministrador(Base):
     __tablename__ = 'usuarios_administradores'
     id_adm = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    cpf = Column(CHAR(11), nullable=False, unique=True, index=True)
     id_usu = Column(UUID(as_uuid=True), ForeignKey('usuarios.id_usu', ondelete='CASCADE'), nullable=False, unique=True)
     usuario = relationship('Usuario', back_populates='administrador')
     ambientes = relationship('Ambiente', back_populates='administrador')
@@ -50,7 +51,6 @@ class UsuarioConvencional(Base):
     __tablename__ = 'usuarios_convencionais'
     id_con = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     cpf = Column(CHAR(11), nullable=False, unique=True, index=True)
-    crm = Column(String(20))
     id_usu = Column(UUID(as_uuid=True), ForeignKey('usuarios.id_usu', ondelete='CASCADE'), nullable=False, unique=True)
     usuario = relationship('Usuario', back_populates='convencional')
     ambientes = relationship('UsuarioAmbiente', back_populates='usuario_convencional')

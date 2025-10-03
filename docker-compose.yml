@@ -17,6 +17,12 @@ services:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - app_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   # Aplicação FastAPI
   app:
@@ -29,6 +35,7 @@ services:
       - ADMIN_NOME_COMPLETO=${ADMIN_NOME_COMPLETO}
       - ADMIN_EMAIL=${ADMIN_EMAIL}
       - ADMIN_SENHA=${ADMIN_SENHA}
+      - ADMIN_CPF=${ADMIN_CPF}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - JWT_ALGORITHM=${JWT_ALGORITHM}
       - JWT_ACCESS_TOKEN_EXPIRE_MINUTES=${JWT_ACCESS_TOKEN_EXPIRE_MINUTES}
@@ -38,7 +45,8 @@ services:
       - ./images:/app/images
       - ./app:/app/app
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     networks:
       - app_network
     restart: unless-stopped

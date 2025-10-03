@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from app.db.database import get_db
@@ -11,21 +11,45 @@ from app.services.auth_service import require_admin
 from app.db import models
 from fastapi import Body
 from app.schemas.auth_schema import CadastroPermitidoOut
-from app.schemas.auth_schema import UsuarioConvencionalCreate, UsuarioAdministradorCreate
+from app.schemas.auth_schema import UsuarioCreate
 from app.core.utils import validar_cpf, validar_nome, validar_forca_senha
 from app.crud.user_crud import get_user_by_email, get_user_by_cpf, create_usuario_convencional, create_usuario_administrador
 from app.crud.cadastro_permitido_crud import get_cadastro_permitido_by_email, marcar_cadastro_como_usado
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from app.schemas.auth_schema import UsuarioOut
 from app.db.models import EventoAuditoria, LogAuditoria
+from app.core.config import settings
 
 # Configura logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["Autenticação"])
 
+def set_auth_cookie(response: Response, access_token: str):
+    """Define o cookie HttpOnly com o token de acesso."""
+    response.set_cookie(
+        key=settings.COOKIE_NAME,
+        value=access_token,
+        max_age=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,  # Converter minutos para segundos
+        httponly=settings.COOKIE_HTTPONLY,
+        samesite=settings.COOKIE_SAMESITE,
+        secure=settings.COOKIE_SECURE,
+        domain=settings.COOKIE_DOMAIN,
+        path="/"
+    )
+
+def clear_auth_cookie(response: Response):
+    """Remove o cookie de autenticação."""
+    response.delete_cookie(
+        key=settings.COOKIE_NAME,
+        samesite=settings.COOKIE_SAMESITE,
+        secure=settings.COOKIE_SECURE,
+        domain=settings.COOKIE_DOMAIN,
+        path="/"
+    )
+
 @router.post("/login")
-def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+def login(response: Response, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     """
     Autentica o usuário e retorna um token de acesso JWT.
 
@@ -59,6 +83,10 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
         data={"sub": str(user.id_usu)}
     )
     logger.info(f"Login bem-sucedido para o usuário: {form_data.username}")
+    
+    # Define o cookie HttpOnly
+    set_auth_cookie(response, access_token)
+    
     # Auditoria
     evento = db.query(EventoAuditoria).filter_by(nome="login").first()
     if evento:
@@ -70,24 +98,27 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
         )
         db.add(log)
         db.commit()
+    
+    # Retorna o token no JSON para compatibilidade (Swagger, testes, etc.)
     return {"access_token": access_token, "token_type": "bearer"}
 
-@router.post("/cadastro-convencional", status_code=201, tags=["Autenticação"])
-def cadastrar_usuario_convencional(
-    dados: UsuarioConvencionalCreate,
+@router.post("/cadastro", status_code=201, tags=["Autenticação"])
+def cadastrar_usuario(
+    response: Response,
+    dados: UsuarioCreate,
     db: Session = Depends(get_db)
 ):
     """
-    Cadastra um novo usuário convencional.
+    Cadastra um novo usuário (convencional ou administrador).
 
     - **Regras:** O e-mail deve estar autorizado, não pode estar em uso, CPF deve ser único e válido.
+    - **Tipo de usuário:** Determinado automaticamente pelo tipo de cadastro permitido na whitelist.
     - **Payload de exemplo:**
       {
         "nome_completo": "João da Silva",
         "email": "joao.silva@email.com",
         "senha": "SenhaForte123",
-        "cpf": "12345678901",
-        "crm": "12345"
+        "cpf": "12345678901"
       }
     - **Respostas:**
       - 201: Usuário criado com sucesso (JWT retornado)
@@ -110,11 +141,6 @@ def cadastrar_usuario_convencional(
         exc = HTTPException(status_code=409, detail="Este email já foi utilizado para cadastro.")
         exc.code = "email_already_used"
         raise exc
-    tipo_conv = db.query(models.TipoUsuario).filter(models.TipoUsuario.nome.ilike("convencional")).first()
-    if not tipo_conv or cadastro.id_tipo != tipo_conv.id_tipo:
-        exc = HTTPException(status_code=403, detail="O email não está autorizado para cadastro de usuário convencional.")
-        exc.code = "wrong_user_type"
-        raise exc
     if cadastro.data_expiracao and cadastro.data_expiracao < datetime.now(timezone.utc):
         exc = HTTPException(status_code=410, detail="O cadastro permitido expirou.")
         exc.code = "cadastro_expired"
@@ -131,83 +157,71 @@ def cadastrar_usuario_convencional(
         exc = HTTPException(status_code=422, detail="Senha fraca. Use pelo menos 8 caracteres, incluindo maiúsculas, minúsculas e números.")
         exc.code = "weak_password"
         raise exc
-    usuario = create_usuario_convencional(db, dados.nome_completo, dados.email, dados.senha, dados.cpf, dados.crm, tipo_conv.id_tipo)
+    
+    # Determinar tipo de usuário baseado no cadastro permitido
+    tipo_usuario = db.query(models.TipoUsuario).filter(models.TipoUsuario.id_tipo == cadastro.id_tipo).first()
+    if not tipo_usuario:
+        exc = HTTPException(status_code=500, detail="Tipo de usuário não encontrado.")
+        exc.code = "user_type_not_found"
+        raise exc
+    
+    # Criar usuário baseado no tipo
+    if tipo_usuario.nome.lower() == "convencional":
+        usuario = create_usuario_convencional(db, dados.nome_completo, dados.email, dados.senha, dados.cpf, tipo_usuario.id_tipo)
+        evento_nome = "cadastrar_usuario_convencional"
+    elif tipo_usuario.nome.lower() == "admin":
+        usuario = create_usuario_administrador(db, dados.nome_completo, dados.email, dados.senha, dados.cpf, tipo_usuario.id_tipo)
+        evento_nome = "cadastrar_usuario_administrador"
+    else:
+        exc = HTTPException(status_code=400, detail="Tipo de usuário inválido.")
+        exc.code = "invalid_user_type"
+        raise exc
+    
     marcar_cadastro_como_usado(db, dados.email)
+    
     # Auditoria
-    evento = db.query(EventoAuditoria).filter_by(nome="cadastrar_usuario_convencional").first()
+    evento = db.query(EventoAuditoria).filter_by(nome=evento_nome).first()
     if evento:
         log = LogAuditoria(
             id_usu=usuario.id_usu,
             evento_id=evento.id_evento,
             data_evento=datetime.now(timezone.utc),
-            detalhes={"email": usuario.email, "nome_completo": usuario.nome_completo}
+            detalhes={"email": usuario.email, "nome_completo": usuario.nome_completo, "tipo": tipo_usuario.nome}
         )
         db.add(log)
         db.commit()
+    
     access_token = auth_service.create_access_token(data={"sub": str(usuario.id_usu)})
+    
+    # Define o cookie HttpOnly
+    set_auth_cookie(response, access_token)
+    
+    # Retorna o token no JSON para compatibilidade (Swagger, testes, etc.)
     return {"access_token": access_token, "token_type": "bearer"}
 
-@router.post("/cadastro-administrador", status_code=201, tags=["Autenticação"])
-def cadastrar_usuario_administrador(
-    dados: UsuarioAdministradorCreate,
-    db: Session = Depends(get_db)
-):
+@router.post("/logout", status_code=200, tags=["Autenticação"])
+def logout(response: Response, current_user: models.Usuario = Depends(auth_service.get_current_user), db: Session = Depends(get_db)):
     """
-    Cadastra um novo usuário administrador.
-
-    - **Regras:** O e-mail deve estar autorizado, não pode estar em uso.
-    - **Payload de exemplo:**
-      {
-        "nome_completo": "Maria Admin",
-        "email": "maria.admin@email.com",
-        "senha": "SenhaForte123"
-      }
-    - **Respostas:**
-      - 201: Usuário criado com sucesso (JWT retornado)
-      - 400/403/409/422: Erros de validação ou negócio
+    Realiza logout do usuário, removendo o cookie de autenticação.
+    
+    - **Acesso:** Usuário autenticado (via cookie ou Bearer token)
+    - **Resposta:** Confirmação de logout
     """
-    if get_user_by_email(db, dados.email):
-        exc = HTTPException(status_code=400, detail="Email já cadastrado por outro usuário.")
-        exc.code = "email_already_registered"
-        raise exc
-    cadastro = get_cadastro_permitido_by_email(db, dados.email)
-    if not cadastro:
-        exc = HTTPException(status_code=403, detail="Email não está autorizado para cadastro.")
-        exc.code = "email_not_permitted"
-        raise exc
-    if cadastro.usado:
-        exc = HTTPException(status_code=409, detail="Este email já foi utilizado para cadastro.")
-        exc.code = "email_already_used"
-        raise exc
-    tipo_adm = db.query(models.TipoUsuario).filter(models.TipoUsuario.nome.ilike("admin")).first()
-    if not tipo_adm or cadastro.id_tipo != tipo_adm.id_tipo:
-        exc = HTTPException(status_code=403, detail="O email não está autorizado para cadastro de administrador.")
-        exc.code = "wrong_user_type"
-        raise exc
-    if cadastro.data_expiracao and cadastro.data_expiracao < datetime.now(timezone.utc):
-        exc = HTTPException(status_code=410, detail="O cadastro permitido expirou.")
-        exc.code = "cadastro_expired"
-        raise exc
-    if not validar_nome(dados.nome_completo):
-        exc = HTTPException(status_code=422, detail="Nome completo inválido. Informe nome e sobrenome.")
-        exc.code = "invalid_name"
-        raise exc
-    if not validar_forca_senha(dados.senha):
-        exc = HTTPException(status_code=422, detail="Senha fraca. Use pelo menos 8 caracteres, incluindo maiúsculas, minúsculas e números.")
-        exc.code = "weak_password"
-        raise exc
-    usuario = create_usuario_administrador(db, dados.nome_completo, dados.email, dados.senha, tipo_adm.id_tipo)
-    marcar_cadastro_como_usado(db, dados.email)
+    logger.info(f"Logout realizado para o usuário: {current_user.email}")
+    
+    # Remove o cookie HttpOnly
+    clear_auth_cookie(response)
+    
     # Auditoria
-    evento = db.query(EventoAuditoria).filter_by(nome="cadastrar_usuario_administrador").first()
+    evento = db.query(EventoAuditoria).filter_by(nome="logout").first()
     if evento:
         log = LogAuditoria(
-            id_usu=usuario.id_usu,
+            id_usu=current_user.id_usu,
             evento_id=evento.id_evento,
             data_evento=datetime.now(timezone.utc),
-            detalhes={"email": usuario.email, "nome_completo": usuario.nome_completo}
+            detalhes={"email": current_user.email}
         )
         db.add(log)
         db.commit()
-    access_token = auth_service.create_access_token(data={"sub": str(usuario.id_usu)})
-    return {"access_token": access_token, "token_type": "bearer"} 
+    
+    return {"message": "Logout realizado com sucesso"} 

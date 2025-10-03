@@ -48,8 +48,14 @@ Para detalhes completos de payloads, exemplos e respostas de cada rota, consulte
 ## 🛠️ Scripts úteis
 
 - Gerar arquivo de exemplo de variáveis de ambiente:
+
   ```bash
   python scripts/gerar_env_example.py
+  ```
+
+- Testar conexão com o banco de dados:
+  ```bash
+  python scripts/test_db_connection.py
   ```
 
 ## 📝 Observações
@@ -57,6 +63,45 @@ Para detalhes completos de payloads, exemplos e respostas de cada rota, consulte
 - O sistema implementa auditoria completa de todas as ações administrativas.
 - Exclusões são lógicas, mantendo histórico.
 - Apenas administradores podem acessar rotas sensíveis.
+
+## 🔧 Troubleshooting
+
+### Problema: Erro de conexão com banco de dados
+
+Se você encontrar erros como `connection refused` ou `database not ready`:
+
+1. **Verifique se o PostgreSQL está rodando:**
+
+   ```bash
+   docker-compose ps
+   ```
+
+2. **Teste a conexão manualmente:**
+
+   ```bash
+   python scripts/test_db_connection.py
+   ```
+
+3. **Reinicie os serviços:**
+
+   ```bash
+   docker-compose down
+   docker-compose up --build
+   ```
+
+4. **Verifique os logs:**
+   ```bash
+   docker-compose logs postgres
+   docker-compose logs app
+   ```
+
+### Problema: Tabelas não são criadas
+
+Se as tabelas não forem criadas automaticamente:
+
+1. **Verifique se o banco está acessível**
+2. **Execute o script de teste de conexão**
+3. **Verifique as permissões do usuário do banco**
 
 ---
 

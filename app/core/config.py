@@ -17,11 +17,19 @@ class Settings(BaseSettings):
     ADMIN_NOME_COMPLETO: str = "Administrador do Sistema"
     ADMIN_EMAIL: str = "admin@seudominio.com"
     ADMIN_SENHA: str = "senha_super_secreta"
+    ADMIN_CPF: str = "00000000000"
 
     # JWT Settings
     JWT_SECRET_KEY: str
     JWT_ALGORITHM: str = "HS256"
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60  # 1 hour
+    
+    # Cookie Settings
+    COOKIE_NAME: str = "access_token"
+    COOKIE_HTTPONLY: bool = True
+    COOKIE_SAMESITE: str = "lax"
+    COOKIE_SECURE: bool = False  # True em produção com HTTPS
+    COOKIE_DOMAIN: str = None  # None para localhost
     
     class Config:
         env_file = ".env"

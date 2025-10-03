@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.services.auth_service import require_admin
-from app.schemas.auth_schema import UsuarioConvencionalCreate, UsuarioAdministradorCreate, UsuarioOut
+from app.schemas.auth_schema import UsuarioOut
 from app.core.utils import validar_cpf, validar_nome, validar_forca_senha
 from app.crud.user_crud import get_user_by_email, get_user_by_cpf, create_usuario_convencional, create_usuario_administrador
 from app.crud.cadastro_permitido_crud import get_cadastro_permitido_by_email, marcar_cadastro_como_usado
@@ -29,8 +29,14 @@ def listar_usuarios(
     for u in usuarios:
         tipo = u.tipo.nome if u.tipo else "desconhecido"
         is_admin = u.tipo and u.tipo.nome.lower() == "admin"
-        cpf = u.convencional.cpf if u.convencional else None
-        crm = u.convencional.crm if u.convencional else None
+        
+        # Buscar CPF baseado no tipo de usuário
+        cpf = None
+        if u.convencional:
+            cpf = u.convencional.cpf
+        elif u.administrador:
+            cpf = u.administrador.cpf
+            
         result.append(
             UsuarioOut(
                 id_usu=str(u.id_usu),
@@ -38,7 +44,6 @@ def listar_usuarios(
                 email=u.email,
                 tipo=tipo,
                 cpf=cpf,
-                crm=crm,
                 is_admin=is_admin,
                 ativo=u.ativo
             )

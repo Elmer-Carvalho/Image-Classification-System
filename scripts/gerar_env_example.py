@@ -4,6 +4,7 @@ descricoes = {
     'ADMIN_NOME_COMPLETO': 'Nome completo do admin inicial',
     'ADMIN_EMAIL': 'E-mail do admin inicial',
     'ADMIN_SENHA': 'Senha do admin inicial',
+    'ADMIN_CPF': 'CPF do admin inicial',
     'JWT_SECRET_KEY': 'Chave secreta para geração dos tokens JWT',
     'JWT_ALGORITHM': 'Algoritmo do JWT (ex: HS256)',
     'JWT_ACCESS_TOKEN_EXPIRE_MINUTES': 'Tempo de expiração do token JWT (em minutos)',
