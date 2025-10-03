@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     COOKIE_HTTPONLY: bool = True
     COOKIE_SAMESITE: str = "lax"
     COOKIE_SECURE: bool = False  # True em produção com HTTPS
-    COOKIE_DOMAIN: str = None  # None para localhost
+    COOKIE_DOMAIN: str | None = None  # None para localhost
     
     class Config:
         env_file = ".env"
