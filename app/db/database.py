@@ -11,17 +11,19 @@ logger = logging.getLogger(__name__)
 # Create database engine
 engine = create_engine(settings.DATABASE_URL)
 
-def wait_for_database(max_retries=30, retry_interval=2):
+def wait_for_database(max_retries=60, retry_interval=3):
     """
     Aguarda o banco de dados estar pronto para conexões.
     
     Args:
-        max_retries: Número máximo de tentativas
-        retry_interval: Intervalo entre tentativas em segundos
+        max_retries: Número máximo de tentativas (padrão: 60 = 3 minutos)
+        retry_interval: Intervalo entre tentativas em segundos (padrão: 3s)
     
     Returns:
         bool: True se conectou com sucesso, False caso contrário
     """
+    print(f"🔄 Aguardando banco de dados estar pronto (máximo {max_retries * retry_interval}s)...")
+    
     for attempt in range(max_retries):
         try:
             # Tenta conectar ao banco
@@ -29,16 +31,20 @@ def wait_for_database(max_retries=30, retry_interval=2):
                 # Executa uma query simples para verificar se está funcionando
                 from sqlalchemy import text
                 conn.execute(text("SELECT 1"))
+            print("✅ Conexão com banco de dados estabelecida com sucesso!")
             logger.info("✅ Conexão com banco de dados estabelecida com sucesso!")
             return True
         except OperationalError as e:
+            print(f"⏳ Tentativa {attempt + 1}/{max_retries} - Banco não está pronto: {str(e)[:100]}...")
             logger.warning(f"⏳ Tentativa {attempt + 1}/{max_retries} - Banco não está pronto: {e}")
             if attempt < max_retries - 1:
                 time.sleep(retry_interval)
             else:
+                print("❌ Falha ao conectar com o banco de dados após todas as tentativas")
                 logger.error("❌ Falha ao conectar com o banco de dados após todas as tentativas")
                 return False
         except Exception as e:
+            print(f"❌ Erro inesperado ao conectar com o banco: {e}")
             logger.error(f"❌ Erro inesperado ao conectar com o banco: {e}")
             return False
     
