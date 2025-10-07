@@ -100,7 +100,7 @@ def login(response: Response, form_data: OAuth2PasswordRequestForm = Depends(), 
         db.commit()
     
     # Retorna o token no JSON para compatibilidade (Swagger, testes, etc.)
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {"access_token": access_token, "token_type": "bearer", "user_type": user.id_tipo}
 
 @router.post("/cadastro", status_code=201, tags=["Autenticação"])
 def cadastrar_usuario(
@@ -197,7 +197,7 @@ def cadastrar_usuario(
     set_auth_cookie(response, access_token)
     
     # Retorna o token no JSON para compatibilidade (Swagger, testes, etc.)
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {"access_token": access_token, "token_type": "bearer", "user_type": usuario.id_tipo}
 
 @router.post("/logout", status_code=200, tags=["Autenticação"])
 def logout(response: Response, current_user: models.Usuario = Depends(auth_service.get_current_user), db: Session = Depends(get_db)):

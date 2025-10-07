@@ -7,6 +7,7 @@ from datetime import datetime
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    user_type: int  # 1 = convencional, 2 = admin
 
 # Remover LoginResponse e TokenData
 
