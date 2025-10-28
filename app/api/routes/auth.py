@@ -80,7 +80,7 @@ def login(response: Response, form_data: OAuth2PasswordRequestForm = Depends(), 
         exc.code = "invalid_credentials"
         raise exc
     access_token = auth_service.create_access_token(
-        data={"sub": str(user.id_usu)}
+        data={"sub": str(user.id_usu)}, user=user
     )
     logger.info(f"Login bem-sucedido para o usuário: {form_data.username}")
     
@@ -191,7 +191,7 @@ def cadastrar_usuario(
         db.add(log)
         db.commit()
     
-    access_token = auth_service.create_access_token(data={"sub": str(usuario.id_usu)})
+    access_token = auth_service.create_access_token(data={"sub": str(usuario.id_usu)}, user=usuario)
     
     # Define o cookie HttpOnly
     set_auth_cookie(response, access_token)

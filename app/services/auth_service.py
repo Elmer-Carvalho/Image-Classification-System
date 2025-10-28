@@ -34,9 +34,20 @@ def authenticate_user(db: Session, email: str, password: str) -> Optional[models
     logger.info(f"Usuário com email {email} autenticado com sucesso.")
     return user
 
-def create_access_token(data: dict) -> str:
+def create_access_token(data: dict, user: models.Usuario = None) -> str:
     """Cria um novo token de acesso JWT."""
     to_encode = data.copy()
+    
+    # Incluir informações do usuário no payload se disponível
+    if user:
+        to_encode.update({
+            "user_type": user.tipo.nome,
+            "user_type_id": user.id_tipo,
+            "name": user.nome_completo,
+            "email": user.email,
+            "is_admin": user.tipo.nome.lower() == "admin"
+        })
+    
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
