@@ -21,7 +21,23 @@
   ```
 - **Resposta:**
   ```json
-  { "access_token": "...", "token_type": "bearer" }
+  { 
+    "access_token": "...", 
+    "token_type": "bearer",
+    "user_type": 2
+  }
+  ```
+- **JWT Payload:** O token contém informações do usuário:
+  ```json
+  {
+    "sub": "user-uuid",
+    "user_type": "admin",           // "admin" ou "convencional"
+    "user_type_id": 2,             // 1 = convencional, 2 = admin
+    "name": "João da Silva",
+    "email": "joao@email.com",
+    "is_admin": true,              // boolean para facilitar verificações
+    "exp": 1234567890
+  }
   ```
 
 ### POST /auth/cadastro
@@ -36,7 +52,7 @@
     "cpf": "12345678901"
   }
   ```
-- **Resposta:** JWT do novo usuário.
+- **Resposta:** JWT do novo usuário com informações do usuário no payload (mesma estrutura do login).
 
 ### POST /auth/logout
 
@@ -46,6 +62,47 @@
   ```json
   { "message": "Logout realizado com sucesso" }
   ```
+
+---
+
+## 🔐 Como Usar o JWT no Frontend
+
+### Decodificando o Token
+
+O frontend pode decodificar o JWT para obter informações do usuário sem fazer requisições adicionais:
+
+```javascript
+function decodeJWT(token) {
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+      return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+    }).join(''));
+    
+    return JSON.parse(jsonPayload);
+  } catch (error) {
+    console.error('Erro ao decodificar JWT:', error);
+    return null;
+  }
+}
+
+// Uso
+const token = localStorage.getItem('token');
+const userData = decodeJWT(token);
+
+if (userData) {
+  console.log('Tipo:', userData.user_type);        // "admin" ou "convencional"
+  console.log('Nome:', userData.name);             // "João da Silva"
+  console.log('É admin:', userData.is_admin);      // true/false
+}
+```
+
+### ⚠️ Importante
+
+- **Sempre valide no backend** - o frontend pode ler, mas nunca deve ser a única fonte de verdade
+- **O JWT é público** - qualquer um pode decodificar e ler essas informações
+- **Não inclua dados sensíveis** - CPF, senhas, etc. não devem estar no JWT
 
 ---
 
