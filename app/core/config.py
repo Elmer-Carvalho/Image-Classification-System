@@ -31,6 +31,15 @@ class Settings(BaseSettings):
     COOKIE_SECURE: bool = False  # True em produção com HTTPS
     COOKIE_DOMAIN: str | None = None  # None para localhost
     
+    # NextCloud WebDAV Settings
+    NEXTCLOUD_BASE_URL: str = ""
+    NEXTCLOUD_USERNAME: str = ""
+    NEXTCLOUD_PASSWORD: str = ""
+    NEXTCLOUD_WEBDAV_PATH: str = "/remote.php/dav"
+    NEXTCLOUD_USER_PATH: str = ""  # Path do usuário (ex: /files/username)
+    NEXTCLOUD_MAX_PAGE_SIZE: int = 100  # Tamanho máximo de página para paginação
+    NEXTCLOUD_VERIFY_SSL: bool = True  # Verificar certificado SSL (False apenas para desenvolvimento)
+    
     class Config:
         env_file = ".env"
         case_sensitive = True

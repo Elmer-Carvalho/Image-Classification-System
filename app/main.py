@@ -21,6 +21,7 @@ from app.api.routes import whitelist
 from app.api.routes import ambientes
 from app.api.routes import usuarios_ambientes
 from app.api.routes import auditoria
+from app.api.routes import nextcloud_images
 # Removido: from app.services.image_service import ImageMonitor
 
 # Criação de tabelas e dependências removidas conforme solicitado
@@ -144,6 +145,7 @@ app.include_router(whitelist.router)
 app.include_router(ambientes.router)
 app.include_router(usuarios_ambientes.router)
 app.include_router(auditoria.router)
+app.include_router(nextcloud_images.router)
 
 @app.get("/")
 def read_root():
