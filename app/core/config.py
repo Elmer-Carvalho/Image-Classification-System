@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+        extra = "ignore"  # Ignora campos extras do .env que não estão no modelo
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

@@ -33,7 +33,7 @@ class UsuarioAdministrador(Base):
     usuario = relationship('Usuario', back_populates='administrador')
     ambientes = relationship('Ambiente', back_populates='administrador')
     cadastros_permitidos = relationship('CadastroPermitido', back_populates='administrador')
-    conjuntos_imagens = relationship('ConjuntoImagens', back_populates='administrador')
+    # Relacionamento com ConjuntoImagens removido - conjuntos são criados automaticamente via sincronização NextCloud
 
 class CadastroPermitido(Base):
     __tablename__ = 'cadastros_permitidos'
@@ -67,7 +67,8 @@ class Ambiente(Base):
     usuarios = relationship('UsuarioAmbiente', back_populates='ambiente')
     conjuntos_imagens = relationship('ConjuntoImagens', back_populates='ambiente')
     formularios = relationship('Formulario', back_populates='ambiente')
-    ativo = Column(Boolean, nullable=False, default=True)  # Exclusão lógica
+    ativo = Column(Boolean, nullable=False, default=True)  # Exclusão lógica por parte do administrador
+    utilizavel = Column(Boolean, nullable=False, default=True)  # Indica se o ambiente está utilizável (todas as pastas existem no NextCloud)
 
 class UsuarioAmbiente(Base):
     __tablename__ = 'usuarios_ambientes'
@@ -95,30 +96,41 @@ class Opcao(Base):
     classificacoes = relationship('Classificacao', back_populates='opcao')
 
 class ConjuntoImagens(Base):
+    """
+    Representa uma pasta do NextCloud.
+    Cada pasta do NextCloud é automaticamente sincronizada e criada como um ConjuntoImagens.
+    A associação com Ambiente é feita manualmente pelo administrador.
+    """
     __tablename__ = 'conjuntos_imagens'
     id_cnj = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    nome_conj = Column(String(255), nullable=False)
-    caminho_conj = Column(String(255), nullable=False)
-    tipo_imagem = Column(String(50))
-    descricao = Column(Text)
-    processado = Column(Boolean, nullable=False, default=False)
-    data_criado = Column(DateTime(timezone=True), nullable=False)
-    id_amb = Column(UUID(as_uuid=True), ForeignKey('ambientes.id_amb', ondelete='CASCADE'), nullable=False)
-    id_adm = Column(UUID(as_uuid=True), ForeignKey('usuarios_administradores.id_adm', ondelete='CASCADE'), nullable=False)
+    nome_conj = Column(String(255), nullable=False)  # Nome da pasta no NextCloud (pode mudar se pasta for renomeada)
+    caminho_conj = Column(String(255), nullable=False)  # Caminho completo da pasta no NextCloud (pode mudar se pasta for movida)
+    file_id = Column(String(255), nullable=False, unique=True)  # ID único da pasta no NextCloud (persistente)
+    imagens_sincronizadas = Column(Boolean, nullable=False, default=False)  # Indica se todas as imagens da pasta foram sincronizadas (mecanismo de segurança para quedas de servidor)
+    existe_no_nextcloud = Column(Boolean, nullable=False, default=True)  # Indica se a pasta ainda existe no NextCloud (política de persistência de dados)
+    data_proc = Column(DateTime(timezone=True), nullable=False)  # Timestamp da primeira vez que a pasta foi processada/sincronizada
+    data_sinc = Column(DateTime(timezone=True), nullable=False)  # Timestamp da última sincronização (atualizado quando há mudanças)
+    id_amb = Column(UUID(as_uuid=True), ForeignKey('ambientes.id_amb', ondelete='CASCADE'), nullable=True)  # FK para Ambiente (associação manual pelo admin - pode ser NULL até ser associado)
     ambiente = relationship('Ambiente', back_populates='conjuntos_imagens')
-    administrador = relationship('UsuarioAdministrador', back_populates='conjuntos_imagens')
     imagens = relationship('Imagem', back_populates='conjunto')
 
 class Imagem(Base):
+    """
+    Representa uma imagem do NextCloud.
+    A chave primária é o content_hash (SHA-256 do conteúdo binário da imagem),
+    garantindo identificação única e persistente mesmo se nome/caminho mudarem.
+    """
     __tablename__ = 'imagens'
-    id_img = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    nome_img = Column(String(255), nullable=False)
-    caminho_img = Column(String(255), nullable=False)
-    metadados = Column(JSONB)
-    data_proc = Column(DateTime(timezone=True), nullable=False)
+    content_hash = Column(String(64), primary_key=True)  # SHA-256 do conteúdo binário (64 caracteres hexadecimais)
+    nome_img = Column(String(255), nullable=False)  # Nome do arquivo no NextCloud (pode mudar se arquivo for renomeado)
+    caminho_img = Column(String(255), nullable=False)  # Caminho completo do arquivo no NextCloud (pode mudar se arquivo for movido)
+    metadados = Column(JSONB)  # Metadados do NextCloud: {file_id, etag, content_type, size, last_modified, width, height, ...}
+    data_proc = Column(DateTime(timezone=True), nullable=False)  # Timestamp da primeira vez que a imagem foi processada e inserida no banco
+    data_sinc = Column(DateTime(timezone=True), nullable=False)  # Timestamp da última sincronização (atualizado quando há mudanças em nome/caminho)
     id_cnj = Column(UUID(as_uuid=True), ForeignKey('conjuntos_imagens.id_cnj', ondelete='CASCADE'), nullable=False)
     conjunto = relationship('ConjuntoImagens', back_populates='imagens')
     classificacoes = relationship('Classificacao', back_populates='imagem')
+    # Nota: content_hash é PK, então já possui índice único automaticamente
 
 class Classificacao(Base):
     __tablename__ = 'classificacoes'
@@ -126,7 +138,7 @@ class Classificacao(Base):
     data_criado = Column(DateTime(timezone=True), nullable=False)
     data_modificado = Column(DateTime(timezone=True))
     id_con = Column(UUID(as_uuid=True), ForeignKey('usuarios_convencionais.id_con', ondelete='CASCADE'), nullable=False, index=True)
-    id_img = Column(UUID(as_uuid=True), ForeignKey('imagens.id_img', ondelete='CASCADE'), nullable=False, index=True)
+    id_img = Column(String(64), ForeignKey('imagens.content_hash', ondelete='CASCADE'), nullable=False, index=True)  # FK mudou de UUID para String (content_hash)
     id_opc = Column(UUID(as_uuid=True), ForeignKey('opcoes.id_opc', ondelete='RESTRICT'), nullable=False, index=True)
     usuario_convencional = relationship('UsuarioConvencional', back_populates='classificacoes')
     imagem = relationship('Imagem', back_populates='classificacoes')

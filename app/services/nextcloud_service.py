@@ -4,7 +4,7 @@ Responsável por listar pastas, filtrar imagens e fazer download de arquivos.
 """
 import requests
 from requests.auth import HTTPBasicAuth
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from xml.etree import ElementTree as ET
 from datetime import datetime
 import logging
@@ -346,6 +346,115 @@ class NextCloudClient:
                 elif e.response.status_code == 403:
                     raise ValueError("Sem permissão para acessar este arquivo")
             raise
+    
+    def check_activity_api_available(self) -> Dict[str, Any]:
+        """
+        Verifica se a Activity API do NextCloud está disponível e acessível.
+        
+        Returns:
+            Dicionário com informações sobre a disponibilidade da API:
+            {
+                'available': bool,
+                'message': str,
+                'endpoint': str,
+                'status_code': int (se houver erro)
+            }
+        """
+        # Endpoint da Activity API
+        activity_url = f"{self.base_url}/ocs/v2.php/apps/activity/api/v2/activity"
+        
+        headers = {
+            'OCS-APIRequest': 'true',
+            'Accept': 'application/json'
+        }
+        
+        try:
+            # Tenta fazer uma requisição simples para verificar se a API está disponível
+            response = requests.get(
+                activity_url,
+                auth=self.auth,
+                headers=headers,
+                params={'format': 'json', 'limit': 1},  # Limita a 1 resultado para ser rápido
+                timeout=10,
+                verify=self.verify_ssl
+            )
+            
+            if response.status_code == 200:
+                try:
+                    data = response.json()
+                    # Verifica se a resposta tem a estrutura esperada da Activity API
+                    if 'ocs' in data and 'data' in data['ocs']:
+                        return {
+                            'available': True,
+                            'message': 'Activity API está disponível e acessível',
+                            'endpoint': activity_url,
+                            'status_code': 200
+                        }
+                    else:
+                        return {
+                            'available': False,
+                            'message': 'Activity API respondeu, mas formato inesperado',
+                            'endpoint': activity_url,
+                            'status_code': 200
+                        }
+                except ValueError:
+                    return {
+                        'available': False,
+                        'message': 'Activity API respondeu, mas não retornou JSON válido',
+                        'endpoint': activity_url,
+                        'status_code': 200
+                    }
+            elif response.status_code == 401:
+                return {
+                    'available': False,
+                    'message': 'Credenciais inválidas ou sem permissão para acessar Activity API',
+                    'endpoint': activity_url,
+                    'status_code': 401
+                }
+            elif response.status_code == 403:
+                return {
+                    'available': False,
+                    'message': 'Sem permissão para acessar Activity API (pode estar desabilitada ou restrita)',
+                    'endpoint': activity_url,
+                    'status_code': 403
+                }
+            elif response.status_code == 404:
+                return {
+                    'available': False,
+                    'message': 'Activity API não encontrada (app de Atividades pode não estar instalado/ativado)',
+                    'endpoint': activity_url,
+                    'status_code': 404
+                }
+            else:
+                return {
+                    'available': False,
+                    'message': f'Activity API retornou status {response.status_code}',
+                    'endpoint': activity_url,
+                    'status_code': response.status_code
+                }
+        
+        except requests.exceptions.Timeout:
+            return {
+                'available': False,
+                'message': 'Timeout ao tentar acessar Activity API (servidor pode estar lento ou inacessível)',
+                'endpoint': activity_url,
+                'status_code': None
+            }
+        except requests.exceptions.ConnectionError:
+            return {
+                'available': False,
+                'message': 'Erro de conexão ao tentar acessar Activity API',
+                'endpoint': activity_url,
+                'status_code': None
+            }
+        except Exception as e:
+            logger.error(f"Erro ao verificar Activity API: {e}")
+            return {
+                'available': False,
+                'message': f'Erro ao verificar Activity API: {str(e)}',
+                'endpoint': activity_url,
+                'status_code': None
+            }
 
 
 # Instância global do cliente (singleton)
