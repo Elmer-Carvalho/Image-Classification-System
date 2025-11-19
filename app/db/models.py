@@ -125,6 +125,7 @@ class Imagem(Base):
     nome_img = Column(String(255), nullable=False)  # Nome do arquivo no NextCloud (pode mudar se arquivo for renomeado)
     caminho_img = Column(String(255), nullable=False)  # Caminho completo do arquivo no NextCloud (pode mudar se arquivo for movido)
     metadados = Column(JSONB)  # Metadados do NextCloud: {file_id, etag, content_type, size, last_modified, width, height, ...}
+    existe_no_nextcloud = Column(Boolean, nullable=False, default=True)  # Indica se a imagem ainda existe no NextCloud (política de persistência de dados)
     data_proc = Column(DateTime(timezone=True), nullable=False)  # Timestamp da primeira vez que a imagem foi processada e inserida no banco
     data_sinc = Column(DateTime(timezone=True), nullable=False)  # Timestamp da última sincronização (atualizado quando há mudanças em nome/caminho)
     id_cnj = Column(UUID(as_uuid=True), ForeignKey('conjuntos_imagens.id_cnj', ondelete='CASCADE'), nullable=False)
@@ -160,4 +161,25 @@ class LogAuditoria(Base):
     data_evento = Column(DateTime(timezone=True), nullable=False, index=True)
     detalhes = Column(JSONB)
     usuario = relationship('Usuario', back_populates='logs')
-    evento = relationship('EventoAuditoria', back_populates='logs') 
+    evento = relationship('EventoAuditoria', back_populates='logs')
+
+class SyncStatus(Base):
+    """
+    Tabela para armazenar o estado da sincronização com NextCloud.
+    Usada como cache para decisões de sincronização e rastreamento de status.
+    Singleton: deve existir apenas um registro (id sempre = 1).
+    """
+    __tablename__ = 'sync_status'
+    id = Column(Integer, primary_key=True, default=1)  # Sempre 1 (singleton)
+    last_activity_api_sync = Column(DateTime(timezone=True))  # Timestamp da última sincronização via Activity API
+    last_webdav_sync = Column(DateTime(timezone=True))  # Timestamp da última sincronização via WebDAV
+    webdav_initial_sync_start = Column(DateTime(timezone=True))  # Timestamp de início da sincronização inicial WebDAV (para Activity API usar como referência)
+    activity_api_available = Column(Boolean, nullable=False, default=True)  # Status da Activity API (disponível ou não)
+    activity_api_last_check = Column(DateTime(timezone=True))  # Timestamp da última verificação da Activity API
+    activity_api_failures = Column(Integer, nullable=False, default=0)  # Contador de falhas consecutivas da Activity API
+    sync_in_progress = Column(Boolean, nullable=False, default=False)  # Flag para evitar execuções simultâneas de sincronização
+    last_sync_status = Column(String(50))  # Status da última sincronização: 'success', 'error', 'partial'
+    last_sync_error = Column(Text)  # Mensagem de erro da última sincronização (se houver)
+    last_sync_method = Column(String(50))  # Método usado na última sincronização: 'activity_api', 'webdav', 'initial'
+    created_at = Column(DateTime(timezone=True), nullable=False)  # Timestamp de criação do registro
+    updated_at = Column(DateTime(timezone=True), nullable=False)  # Timestamp da última atualização 

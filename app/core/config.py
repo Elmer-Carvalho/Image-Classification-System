@@ -40,6 +40,17 @@ class Settings(BaseSettings):
     NEXTCLOUD_MAX_PAGE_SIZE: int = 100  # Tamanho máximo de página para paginação
     NEXTCLOUD_VERIFY_SSL: bool = True  # Verificar certificado SSL (False apenas para desenvolvimento)
     
+    # NextCloud Sync Settings
+    NEXTCLOUD_SYNC_ACTIVITY_API_INTERVAL: int = 5  # Intervalo em minutos para sincronização via Activity API (padrão: 5)
+    NEXTCLOUD_SYNC_WEBDAV_INTERVAL: int = 300  # Intervalo em minutos para sincronização via WebDAV (padrão: 300 = 5 horas)
+    NEXTCLOUD_SYNC_INITIAL_ON_STARTUP: bool = True  # Executar sincronização completa ao iniciar o sistema (true/false, padrão: true)
+    NEXTCLOUD_SYNC_MAX_RETRIES: int = 3  # Número máximo de tentativas em caso de erro (padrão: 3)
+    NEXTCLOUD_SYNC_RETRY_DELAY: int = 30  # Delay em segundos entre tentativas (padrão: 30)
+    NEXTCLOUD_SYNC_BATCH_SIZE: int = 50  # Tamanho do lote para processamento de imagens (padrão: 50)
+    
+    # Timezone Settings
+    TIMEZONE: str = "America/Sao_Paulo"  # Fuso horário padrão (Brasília), pode ser alterado via .env (ex: "UTC", "America/New_York")
+    
     class Config:
         env_file = ".env"
         case_sensitive = True

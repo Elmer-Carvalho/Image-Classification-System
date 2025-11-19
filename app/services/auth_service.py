@@ -48,7 +48,8 @@ def create_access_token(data: dict, user: models.Usuario = None) -> str:
             "is_admin": user.tipo.nome.lower() == "admin"
         })
     
-    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
+    from app.core.timezone import local_to_utc, now as tz_now
+    expire = local_to_utc(tz_now()) + timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
     logger.info(f"Token de acesso criado para: {data.get('sub')}")
