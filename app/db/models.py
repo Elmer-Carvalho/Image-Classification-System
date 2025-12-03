@@ -75,6 +75,7 @@ class UsuarioAmbiente(Base):
     id_con = Column(UUID(as_uuid=True), ForeignKey('usuarios_convencionais.id_con', ondelete='CASCADE'), primary_key=True)
     id_amb = Column(UUID(as_uuid=True), ForeignKey('ambientes.id_amb', ondelete='CASCADE'), primary_key=True)
     data_associado = Column(DateTime(timezone=True), nullable=False)
+    ativo = Column(Boolean, nullable=False, default=True)  # Exclusão lógica (cascata quando ambiente é excluído)
     usuario_convencional = relationship('UsuarioConvencional', back_populates='ambientes')
     ambiente = relationship('Ambiente', back_populates='usuarios')
 

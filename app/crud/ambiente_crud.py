@@ -121,13 +121,22 @@ def excluir_ambiente(db: Session, id_amb):
         # Excluir logicamente o ambiente
         ambiente.ativo = False
         
-        # Excluir logicamente todas as associações em cascata
-        associacoes = db.query(models.AmbienteConjuntoImagens).filter(
+        # Excluir logicamente todas as associações com conjuntos em cascata
+        associacoes_conjuntos = db.query(models.AmbienteConjuntoImagens).filter(
             models.AmbienteConjuntoImagens.id_amb == id_amb_uuid,
             models.AmbienteConjuntoImagens.ativo == True
         ).all()
         
-        for associacao in associacoes:
+        for associacao in associacoes_conjuntos:
+            associacao.ativo = False
+        
+        # Excluir logicamente todas as associações com usuários em cascata
+        associacoes_usuarios = db.query(models.UsuarioAmbiente).filter(
+            models.UsuarioAmbiente.id_amb == id_amb_uuid,
+            models.UsuarioAmbiente.ativo == True
+        ).all()
+        
+        for associacao in associacoes_usuarios:
             associacao.ativo = False
         
         db.commit()
@@ -163,38 +172,52 @@ def reativar_ambiente(db: Session, id_amb):
     if not ambiente:
         return None
     
-    # Buscar todas as associações inativas deste ambiente
-    associacoes = db.query(models.AmbienteConjuntoImagens).filter(
+    # Buscar todas as associações inativas deste ambiente (conjuntos e usuários)
+    associacoes_conjuntos = db.query(models.AmbienteConjuntoImagens).filter(
         models.AmbienteConjuntoImagens.id_amb == id_amb_uuid,
         models.AmbienteConjuntoImagens.ativo == False
     ).all()
     
-    if not associacoes:
+    associacoes_usuarios = db.query(models.UsuarioAmbiente).filter(
+        models.UsuarioAmbiente.id_amb == id_amb_uuid,
+        models.UsuarioAmbiente.ativo == False
+    ).all()
+    
+    if not associacoes_conjuntos and not associacoes_usuarios:
         # Não há associações para reativar
         return None
     
     # Verificar quais conjuntos ainda existem no NextCloud
-    ids_conjuntos = [assoc.id_cnj for assoc in associacoes]
-    conjuntos_validos = db.query(models.ConjuntoImagens).filter(
-        models.ConjuntoImagens.id_cnj.in_(ids_conjuntos),
-        models.ConjuntoImagens.existe_no_nextcloud == True
-    ).all()
+    associacoes_conjuntos_reativadas = 0
+    if associacoes_conjuntos:
+        ids_conjuntos = [assoc.id_cnj for assoc in associacoes_conjuntos]
+        conjuntos_validos = db.query(models.ConjuntoImagens).filter(
+            models.ConjuntoImagens.id_cnj.in_(ids_conjuntos),
+            models.ConjuntoImagens.existe_no_nextcloud == True
+        ).all()
+        
+        ids_conjuntos_validos = {cnj.id_cnj for cnj in conjuntos_validos}
+        
+        # Reativar apenas as associações com conjuntos válidos
+        for associacao in associacoes_conjuntos:
+            if associacao.id_cnj in ids_conjuntos_validos:
+                associacao.ativo = True
+                associacoes_conjuntos_reativadas += 1
     
-    ids_conjuntos_validos = {cnj.id_cnj for cnj in conjuntos_validos}
-    
-    # Se nenhum conjunto for válido, não reativar ambiente
-    if not ids_conjuntos_validos:
-        return None
-    
-    # Reativar apenas as associações com conjuntos válidos
-    associacoes_reativadas = 0
-    for associacao in associacoes:
-        if associacao.id_cnj in ids_conjuntos_validos:
+    # Reativar associações com usuários (verificar se usuários ainda estão ativos)
+    associacoes_usuarios_reativadas = 0
+    for associacao in associacoes_usuarios:
+        # Verificar se o usuário convencional ainda está ativo
+        usuario_conv = db.query(models.UsuarioConvencional).filter_by(
+            id_con=associacao.id_con
+        ).first()
+        
+        if usuario_conv and usuario_conv.usuario.ativo:
             associacao.ativo = True
-            associacoes_reativadas += 1
+            associacoes_usuarios_reativadas += 1
     
-    # Reativar ambiente apenas se pelo menos uma associação foi reativada
-    if associacoes_reativadas > 0:
+    # Reativar ambiente apenas se pelo menos uma associação (conjunto ou usuário) foi reativada
+    if associacoes_conjuntos_reativadas > 0 or associacoes_usuarios_reativadas > 0:
         ambiente.ativo = True
         db.commit()
         return ambiente

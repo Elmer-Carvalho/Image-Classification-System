@@ -140,12 +140,13 @@ class AmbienteOut(BaseModel):
             }
         } 
 
-class UsuarioAmbienteVinculoIn(BaseModel):
+# Schemas para Usuario-Ambiente (novos)
+class UsuarioAmbienteAssociarIn(BaseModel):
     """
-    Schema de entrada para vinculação de 1 a N usuários a um ambiente.
-    Utilizado em: POST /usuarios-ambientes/{id_amb}/associar
+    Schema de entrada para associar usuários convencionais a um ambiente.
+    Utilizado em: POST /usuarios-ambientes/associar
     """
-    ids_usuarios: list[str]
+    ids_usuarios: list[str] = Field(..., min_length=1, description="Lista de IDs de usuários convencionais (mínimo 1)")
 
     class Config:
         json_schema_extra = {
@@ -157,42 +158,25 @@ class UsuarioAmbienteVinculoIn(BaseModel):
             }
         }
 
-class UsuarioAmbienteVinculoOut(BaseModel):
-    """
-    Schema de saída para listagem de vínculos usuário-ambiente (admin).
-    Mostra dados do ambiente e lista de usuários vinculados.
-    Utilizado em: GET /usuarios-ambientes
-    """
+class AmbienteInfoOut(BaseModel):
+    """Informações básicas de um ambiente."""
     id_amb: str
     titulo_amb: str
     descricao: str
-    usuarios: list[dict]
     ativo: bool
 
     class Config:
         from_attributes = True
-        json_schema_extra = {
-            "example": {
-                "id_amb": "a1b2c3d4-5678-1234-9abc-1234567890ab",
-                "titulo_amb": "Ambiente de Teste",
-                "descricao": "Ambiente para testes e validações.",
-                "usuarios": [
-                    {"id_con": "c1d2e3f4-5678-1234-9abc-1234567890ab", "nome_completo": "João da Silva", "email": "joao@email.com", "ativo": True},
-                    {"id_con": "d2e3f4c5-6789-2345-0bcd-2345678901bc", "nome_completo": "Maria Souza", "email": "maria@email.com", "ativo": True}
-                ],
-                "ativo": True
-            }
-        }
 
-class UsuarioAmbienteAmbientesOut(BaseModel):
+class UsuarioAmbientesOut(BaseModel):
     """
-    Schema de saída para listagem dos ambientes de um usuário convencional.
-    Utilizado em: GET /usuarios-ambientes/usuario/{id_con}
+    Schema de saída para listagem dos ambientes de um usuário.
+    Utilizado em: GET /usuarios-ambientes/meus-ambientes ou GET /usuarios-ambientes/usuario/{id_con}
     """
     id_con: str
     nome_completo: str
     email: str
-    ambientes: list[dict]
+    ambientes: list[AmbienteInfoOut]
 
     class Config:
         from_attributes = True
@@ -202,11 +186,72 @@ class UsuarioAmbienteAmbientesOut(BaseModel):
                 "nome_completo": "João da Silva",
                 "email": "joao@email.com",
                 "ambientes": [
-                    {"id_amb": "a1b2c3d4-5678-1234-9abc-1234567890ab", "titulo_amb": "Ambiente de Teste", "descricao": "Ambiente para testes", "ativo": True},
-                    {"id_amb": "b2c3d4e5-7890-3456-1cde-345678901cde", "titulo_amb": "Ambiente 2", "descricao": "Outro ambiente", "ativo": True}
+                    {
+                        "id_amb": "a1b2c3d4-5678-1234-9abc-1234567890ab",
+                        "titulo_amb": "Ambiente de Teste",
+                        "descricao": "Ambiente para testes",
+                        "ativo": True
+                    }
                 ]
             }
-        } 
+        }
+
+class UsuarioAmbienteAssociacaoOut(BaseModel):
+    """Schema de saída para uma associação usuário-ambiente."""
+    id_con: str
+    id_amb: str
+    data_associado: datetime
+    ativo: bool
+    nome_usuario: str
+    email_usuario: str
+    titulo_ambiente: str
+
+    class Config:
+        from_attributes = True
+
+class UsuarioInfoOut(BaseModel):
+    """Informações básicas de um usuário convencional."""
+    id_con: str
+    nome_completo: str
+    email: str
+    ativo: bool
+    data_associado: datetime
+
+    class Config:
+        from_attributes = True
+
+class AmbienteUsuariosOut(BaseModel):
+    """
+    Schema de saída para listagem de usuários associados a um ambiente.
+    Utilizado em: GET /usuarios-ambientes/ambiente/{id_amb}/usuarios
+    """
+    id_amb: str
+    titulo_amb: str
+    descricao: str
+    ativo: bool
+    usuarios: list[UsuarioInfoOut]
+    total: int
+
+    class Config:
+        from_attributes = True
+        json_schema_extra = {
+            "example": {
+                "id_amb": "a1b2c3d4-5678-1234-9abc-1234567890ab",
+                "titulo_amb": "Ambiente de Teste",
+                "descricao": "Ambiente para testes e validações.",
+                "ativo": True,
+                "usuarios": [
+                    {
+                        "id_con": "c1d2e3f4-5678-1234-9abc-1234567890ab",
+                        "nome_completo": "João da Silva",
+                        "email": "joao@email.com",
+                        "ativo": True,
+                        "data_associado": "2024-06-01T12:34:56.789Z"
+                    }
+                ],
+                "total": 1
+            }
+        }
 
 class LogAuditoriaOut(BaseModel):
     """
@@ -284,4 +329,4 @@ class LogAuditoriaPage(BaseModel):
                 "total": 120,
                 "is_last_page": False
             }
-        } 
+        }
