@@ -253,4 +253,8 @@ yarn-error.log*
 
 # Local development
 .local/
-local/ 
+local/
+
+# Scripts folder (test code)
+Script/
+scripts/
