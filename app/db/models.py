@@ -1,8 +1,11 @@
-from sqlalchemy import Column, String, Integer, Boolean, DateTime, Text, ForeignKey, UniqueConstraint, JSON, CHAR
+from sqlalchemy import Column, String, Integer, Boolean, DateTime, Text, ForeignKey, UniqueConstraint, JSON, CHAR, event
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from app.db.database import Base
 import uuid
+import logging
+
+logger = logging.getLogger(__name__)
 
 class TipoUsuario(Base):
     __tablename__ = 'tipo_usuarios'
@@ -60,13 +63,14 @@ class Ambiente(Base):
     __tablename__ = 'ambientes'
     id_amb = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     titulo_amb = Column(String(255), nullable=False, unique=True)
-    descricao = Column(Text)
+    titulo_questionario = Column(String(255), nullable=True)  # Título do questionário do ambiente
+    descricao_questionario = Column(Text, nullable=False)  # Descrição do questionário (obrigatório)
     data_criado = Column(DateTime(timezone=True), nullable=False)
     id_adm = Column(UUID(as_uuid=True), ForeignKey('usuarios_administradores.id_adm', ondelete='CASCADE'), nullable=False)
     administrador = relationship('UsuarioAdministrador', back_populates='ambientes')
     usuarios = relationship('UsuarioAmbiente', back_populates='ambiente')
     conjuntos_imagens = relationship('AmbienteConjuntoImagens', back_populates='ambiente')
-    formularios = relationship('Formulario', back_populates='ambiente')
+    opcoes = relationship('Opcao', back_populates='ambiente', cascade='all, delete-orphan')
     ativo = Column(Boolean, nullable=False, default=True)  # Exclusão lógica por parte do administrador
     utilizavel = Column(Boolean, nullable=False, default=True)  # Indica se o ambiente está utilizável (todas as pastas existem no NextCloud)
 
@@ -79,22 +83,71 @@ class UsuarioAmbiente(Base):
     usuario_convencional = relationship('UsuarioConvencional', back_populates='ambientes')
     ambiente = relationship('Ambiente', back_populates='usuarios')
 
-class Formulario(Base):
-    __tablename__ = 'formularios'
-    id_for = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    titulo = Column(String(255), nullable=False)
-    descricao = Column(Text)
-    id_amb = Column(UUID(as_uuid=True), ForeignKey('ambientes.id_amb', ondelete='CASCADE'), nullable=False)
-    ambiente = relationship('Ambiente', back_populates='formularios')
-    opcoes = relationship('Opcao', back_populates='formulario')
-
 class Opcao(Base):
+    """
+    Representa uma opção de classificação para um ambiente.
+    
+    IMPORTANTE: O campo 'texto' é IMUTÁVEL após a criação.
+    Alterar o texto de uma opção comprometeria a integridade do histórico
+    de anotações/classificações, pois as classificações existentes referenciam
+    este texto através do ID da opção.
+    
+    Para modificar uma opção, deve-se criar uma nova opção e, se necessário,
+    migrar as classificações existentes.
+    """
     __tablename__ = 'opcoes'
     id_opc = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    texto = Column(String(255), nullable=False)
-    id_for = Column(UUID(as_uuid=True), ForeignKey('formularios.id_for', ondelete='CASCADE'), nullable=False)
-    formulario = relationship('Formulario', back_populates='opcoes')
+    texto = Column(String(255), nullable=False)  # IMUTÁVEL após criação - não pode ser alterado
+    id_amb = Column(UUID(as_uuid=True), ForeignKey('ambientes.id_amb', ondelete='CASCADE'), nullable=False)
+    ambiente = relationship('Ambiente', back_populates='opcoes')
     classificacoes = relationship('Classificacao', back_populates='opcao')
+    
+    def __setattr__(self, key, value):
+        """
+        Impede a alteração do campo 'texto' após a criação do objeto.
+        Isso garante a integridade do histórico de classificações.
+        """
+        if key == 'texto' and hasattr(self, 'texto') and self.texto is not None:
+            # Se o objeto já existe no banco (tem ID) e já tem texto definido
+            if hasattr(self, 'id_opc') and self.id_opc is not None:
+                raise ValueError(
+                    "O campo 'texto' de uma Opção é IMUTÁVEL após a criação. "
+                    "Alterar este campo comprometeria a integridade do histórico de anotações. "
+                    "Para modificar uma opção, crie uma nova opção."
+                )
+        super().__setattr__(key, value)
+
+
+# Event listener para impedir atualização do campo 'texto' via SQLAlchemy
+@event.listens_for(Opcao, 'before_update', propagate=True)
+def prevent_texto_update(mapper, connection, target):
+    """
+    Event listener que impede a atualização do campo 'texto' de uma Opção.
+    
+    Este listener é acionado antes de qualquer operação UPDATE no banco de dados,
+    garantindo que mesmo tentativas diretas de atualização sejam bloqueadas.
+    """
+    # Verificar se o objeto está sendo atualizado (não é uma inserção)
+    if target.id_opc is not None:
+        # Obter o estado original do objeto antes da atualização
+        from sqlalchemy.orm import object_session
+        session = object_session(target)
+        if session:
+            # Comparar o valor atual com o valor original
+            state = session.inspect(target)
+            if state.has_identity:
+                history = state.get_history('texto', True)
+                if history.has_changes():
+                    logger.warning(
+                        f"Tentativa de atualizar o campo 'texto' da Opção {target.id_opc} bloqueada. "
+                        "O campo 'texto' é imutável para preservar a integridade do histórico de classificações."
+                    )
+                    raise ValueError(
+                        "O campo 'texto' de uma Opção é IMUTÁVEL após a criação. "
+                        "Alterar este campo comprometeria a integridade do histórico de anotações. "
+                        "Para modificar uma opção, crie uma nova opção."
+                    )
+
 
 class AmbienteConjuntoImagens(Base):
     """

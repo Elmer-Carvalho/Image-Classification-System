@@ -93,14 +93,22 @@ class AmbienteCreate(BaseModel):
     Utilizado em: POST /ambientes
     """
     titulo_amb: constr(strip_whitespace=True, min_length=3, max_length=255)
-    descricao: constr(strip_whitespace=True, min_length=3)
+    titulo_questionario: Optional[constr(strip_whitespace=True, max_length=255)] = None
+    descricao_questionario: constr(strip_whitespace=True, min_length=3)
+    opcoes: list[str] = Field(..., min_length=2, description="Lista de textos de opções (mínimo 2)")
     ids_conjuntos: list[str] = Field(..., min_length=1, description="Lista de IDs de ConjuntoImagens (mínimo 1)")
 
     class Config:
         json_schema_extra = {
             "example": {
                 "titulo_amb": "Ambiente de Teste",
-                "descricao": "Ambiente para testes e validações.",
+                "titulo_questionario": "Questionário de Classificação",
+                "descricao_questionario": "Descrição do questionário para testes e validações.",
+                "opcoes": [
+                    "Opção 1",
+                    "Opção 2",
+                    "Opção 3"
+                ],
                 "ids_conjuntos": [
                     "a1b2c3d4-5678-1234-9abc-1234567890ab",
                     "b2c3d4e5-6789-2345-0bcd-2345678901bc"
@@ -115,7 +123,8 @@ class AmbienteOut(BaseModel):
     """
     id_amb: str
     titulo_amb: str
-    descricao: str
+    titulo_questionario: Optional[str] = None
+    descricao_questionario: str
     data_criado: datetime
     id_adm: str
     nome_administrador: str
@@ -128,7 +137,8 @@ class AmbienteOut(BaseModel):
             "example": {
                 "id_amb": "a1b2c3d4-5678-1234-9abc-1234567890ab",
                 "titulo_amb": "Ambiente de Teste",
-                "descricao": "Ambiente para testes e validações.",
+                "titulo_questionario": "Questionário de Classificação",
+                "descricao_questionario": "Descrição do questionário para testes e validações.",
                 "data_criado": "2024-06-01T12:34:56.789Z",
                 "id_adm": "b1e2c3d4-5678-1234-9abc-1234567890ab",
                 "nome_administrador": "Maria Admin",
@@ -296,6 +306,77 @@ class EventoAuditoriaOut(BaseModel):
                 "id_evento": 1,
                 "nome": "criar_ambiente",
                 "descricao": "Criação de ambiente"
+            }
+        }
+
+# Schemas para Opções
+class OpcaoCreate(BaseModel):
+    """Schema de entrada para criar uma opção."""
+    texto: constr(strip_whitespace=True, min_length=1, max_length=255)
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "texto": "Opção de exemplo"
+            }
+        }
+
+class OpcaoOut(BaseModel):
+    """Schema de saída para informações de uma opção."""
+    id_opc: str
+    texto: str
+    id_amb: str
+
+    class Config:
+        from_attributes = True
+        json_schema_extra = {
+            "example": {
+                "id_opc": "a1b2c3d4-5678-1234-9abc-1234567890ab",
+                "texto": "Opção de exemplo",
+                "id_amb": "b1e2c3d4-5678-1234-9abc-1234567890ab"
+            }
+        }
+
+class OpcoesListResponse(BaseModel):
+    """Schema de resposta para lista de opções de um ambiente."""
+    id_amb: str
+    titulo_amb: str
+    opcoes: list[OpcaoOut]
+    total: int
+
+    class Config:
+        from_attributes = True
+
+class AmbienteUpdateTitulo(BaseModel):
+    """Schema para atualizar título do ambiente."""
+    titulo_amb: constr(strip_whitespace=True, min_length=3, max_length=255)
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "titulo_amb": "Novo Título do Ambiente"
+            }
+        }
+
+class AmbienteUpdateDescricaoQuestionario(BaseModel):
+    """Schema para atualizar descrição do questionário."""
+    descricao_questionario: constr(strip_whitespace=True, min_length=3)
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "descricao_questionario": "Nova descrição do questionário"
+            }
+        }
+
+class AmbienteUpdateTituloQuestionario(BaseModel):
+    """Schema para atualizar título do questionário."""
+    titulo_questionario: Optional[constr(strip_whitespace=True, max_length=255)] = None
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "titulo_questionario": "Novo Título do Questionário"
             }
         }
 

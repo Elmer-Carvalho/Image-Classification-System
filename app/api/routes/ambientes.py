@@ -2,7 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException, status, Body
 from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.services.auth_service import require_admin
-from app.schemas.auth_schema import AmbienteCreate, AmbienteOut
+from app.schemas.auth_schema import (
+    AmbienteCreate, 
+    AmbienteOut,
+    AmbienteUpdateTitulo,
+    AmbienteUpdateDescricaoQuestionario,
+    AmbienteUpdateTituloQuestionario
+)
 from app.crud import ambiente_crud
 from app.db import models
 from datetime import datetime, timezone
@@ -38,6 +44,15 @@ def criar_ambiente(
         exc.code = "ids_conjuntos_empty"
         raise exc
     
+    # Validar que há pelo menos 2 opções
+    if not ambiente.opcoes or len(ambiente.opcoes) < 2:
+        exc = HTTPException(
+            status_code=400,
+            detail="Um ambiente deve ter pelo menos 2 opções."
+        )
+        exc.code = "opcoes_minimum"
+        raise exc
+    
     if ambiente_crud.buscar_ambiente_por_titulo(db, ambiente.titulo_amb):
         exc = HTTPException(status_code=409, detail="Já existe um ambiente com este título.")
         exc.code = "ambiente_title_exists"
@@ -45,18 +60,20 @@ def criar_ambiente(
     
     novo, ids_validos = ambiente_crud.criar_ambiente(
         db, 
-        ambiente.titulo_amb, 
-        ambiente.descricao, 
+        ambiente.titulo_amb,
+        ambiente.titulo_questionario,
+        ambiente.descricao_questionario,
         admin.administrador.id_adm,
-        ambiente.ids_conjuntos
+        ambiente.ids_conjuntos,
+        ambiente.opcoes
     )
     
     if not novo:
         exc = HTTPException(
             status_code=400,
-            detail="Não foi possível criar o ambiente. Verifique se todos os IDs de conjuntos são válidos e existem no banco de dados."
+            detail="Não foi possível criar o ambiente. Verifique se todos os IDs de conjuntos são válidos, se há pelo menos 2 opções válidas, e se não há opções duplicadas."
         )
-        exc.code = "invalid_conjuntos_ids"
+        exc.code = "invalid_data"
         raise exc
     
     nome_adm = admin.nome_completo
@@ -83,7 +100,8 @@ def criar_ambiente(
     return AmbienteOut(
         id_amb=str(novo.id_amb),
         titulo_amb=novo.titulo_amb,
-        descricao=novo.descricao,
+        titulo_questionario=novo.titulo_questionario,
+        descricao_questionario=novo.descricao_questionario,
         data_criado=novo.data_criado,
         id_adm=str(novo.id_adm),
         nome_administrador=nome_adm,
@@ -110,7 +128,8 @@ def listar_ambientes(
             AmbienteOut(
                 id_amb=str(a.id_amb),
                 titulo_amb=a.titulo_amb,
-                descricao=a.descricao,
+                titulo_questionario=a.titulo_questionario,
+                descricao_questionario=a.descricao_questionario,
                 data_criado=a.data_criado,
                 id_adm=str(a.id_adm),
                 nome_administrador=nome_adm,
@@ -187,11 +206,185 @@ def reativar_ambiente_route(id_amb: str, admin: models.Usuario = Depends(require
         "ambiente": AmbienteOut(
             id_amb=str(ambiente.id_amb),
             titulo_amb=ambiente.titulo_amb,
-            descricao=ambiente.descricao,
+            titulo_questionario=ambiente.titulo_questionario,
+            descricao_questionario=ambiente.descricao_questionario,
             data_criado=ambiente.data_criado,
             id_adm=str(ambiente.id_adm),
             nome_administrador=nome_adm,
             ativo=ambiente.ativo,
             ids_conjuntos=ids_conjuntos
         )
-    } 
+    }
+
+
+@router.patch("/{id_amb}/titulo", response_model=AmbienteOut, status_code=200)
+def atualizar_titulo_ambiente(
+    id_amb: str,
+    payload: AmbienteUpdateTitulo = Body(...),
+    admin: models.Usuario = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """
+    Atualiza o título de um ambiente.
+    
+    - **Acesso:** Apenas administradores autenticados.
+    - **Validações:**
+      - Título não pode ser vazio ou só espaços
+      - Título deve ter entre 3 e 255 caracteres
+      - Título deve ser único
+    - **Respostas:**
+      - 200: Título atualizado com sucesso
+      - 400: Título inválido ou já existe
+      - 404: Ambiente não encontrado
+    """
+    ambiente = ambiente_crud.atualizar_titulo_ambiente(db, id_amb, payload.titulo_amb)
+    
+    if not ambiente:
+        exc = HTTPException(
+            status_code=400,
+            detail="Não foi possível atualizar o título. Verifique se o título é válido e não está em uso por outro ambiente."
+        )
+        exc.code = "invalid_titulo"
+        raise exc
+    
+    nome_adm = ambiente.administrador.usuario.nome_completo if ambiente.administrador and ambiente.administrador.usuario else "(desconhecido)"
+    ids_conjuntos = ambiente_crud.obter_conjuntos_do_ambiente(db, ambiente.id_amb)
+    
+    # Auditoria
+    evento = db.query(EventoAuditoria).filter_by(nome="atualizar_titulo_ambiente").first()
+    if evento:
+        log = LogAuditoria(
+            id_usu=admin.id_usu,
+            evento_id=evento.id_evento,
+            data_evento=datetime.now(timezone.utc),
+            detalhes={"id_amb": id_amb, "novo_titulo": payload.titulo_amb}
+        )
+        db.add(log)
+        db.commit()
+    
+    return AmbienteOut(
+        id_amb=str(ambiente.id_amb),
+        titulo_amb=ambiente.titulo_amb,
+        titulo_questionario=ambiente.titulo_questionario,
+        descricao_questionario=ambiente.descricao_questionario,
+        data_criado=ambiente.data_criado,
+        id_adm=str(ambiente.id_adm),
+        nome_administrador=nome_adm,
+        ativo=ambiente.ativo,
+        ids_conjuntos=ids_conjuntos
+    )
+
+
+@router.patch("/{id_amb}/descricao-questionario", response_model=AmbienteOut, status_code=200)
+def atualizar_descricao_questionario(
+    id_amb: str,
+    payload: AmbienteUpdateDescricaoQuestionario = Body(...),
+    admin: models.Usuario = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """
+    Atualiza a descrição do questionário de um ambiente.
+    
+    - **Acesso:** Apenas administradores autenticados.
+    - **Validações:**
+      - Descrição não pode ser vazia ou só espaços
+      - Descrição deve ter no mínimo 3 caracteres
+    - **Respostas:**
+      - 200: Descrição atualizada com sucesso
+      - 400: Descrição inválida
+      - 404: Ambiente não encontrado
+    """
+    ambiente = ambiente_crud.atualizar_descricao_questionario(db, id_amb, payload.descricao_questionario)
+    
+    if not ambiente:
+        exc = HTTPException(
+            status_code=400,
+            detail="Não foi possível atualizar a descrição. Verifique se a descrição é válida (mínimo 3 caracteres)."
+        )
+        exc.code = "invalid_descricao"
+        raise exc
+    
+    nome_adm = ambiente.administrador.usuario.nome_completo if ambiente.administrador and ambiente.administrador.usuario else "(desconhecido)"
+    ids_conjuntos = ambiente_crud.obter_conjuntos_do_ambiente(db, ambiente.id_amb)
+    
+    # Auditoria
+    evento = db.query(EventoAuditoria).filter_by(nome="atualizar_descricao_questionario").first()
+    if evento:
+        log = LogAuditoria(
+            id_usu=admin.id_usu,
+            evento_id=evento.id_evento,
+            data_evento=datetime.now(timezone.utc),
+            detalhes={"id_amb": id_amb}
+        )
+        db.add(log)
+        db.commit()
+    
+    return AmbienteOut(
+        id_amb=str(ambiente.id_amb),
+        titulo_amb=ambiente.titulo_amb,
+        titulo_questionario=ambiente.titulo_questionario,
+        descricao_questionario=ambiente.descricao_questionario,
+        data_criado=ambiente.data_criado,
+        id_adm=str(ambiente.id_adm),
+        nome_administrador=nome_adm,
+        ativo=ambiente.ativo,
+        ids_conjuntos=ids_conjuntos
+    )
+
+
+@router.patch("/{id_amb}/titulo-questionario", response_model=AmbienteOut, status_code=200)
+def atualizar_titulo_questionario(
+    id_amb: str,
+    payload: AmbienteUpdateTituloQuestionario = Body(...),
+    admin: models.Usuario = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """
+    Atualiza o título do questionário de um ambiente.
+    
+    - **Acesso:** Apenas administradores autenticados.
+    - **Validações:**
+      - Se fornecido, título não pode ser só espaços
+      - Título não pode exceder 255 caracteres
+      - Pode ser None para remover o título
+    - **Respostas:**
+      - 200: Título atualizado com sucesso
+      - 400: Título inválido
+      - 404: Ambiente não encontrado
+    """
+    ambiente = ambiente_crud.atualizar_titulo_questionario(db, id_amb, payload.titulo_questionario)
+    
+    if not ambiente:
+        exc = HTTPException(
+            status_code=400,
+            detail="Não foi possível atualizar o título do questionário. Verifique se o título é válido (máximo 255 caracteres)."
+        )
+        exc.code = "invalid_titulo_questionario"
+        raise exc
+    
+    nome_adm = ambiente.administrador.usuario.nome_completo if ambiente.administrador and ambiente.administrador.usuario else "(desconhecido)"
+    ids_conjuntos = ambiente_crud.obter_conjuntos_do_ambiente(db, ambiente.id_amb)
+    
+    # Auditoria
+    evento = db.query(EventoAuditoria).filter_by(nome="atualizar_titulo_questionario").first()
+    if evento:
+        log = LogAuditoria(
+            id_usu=admin.id_usu,
+            evento_id=evento.id_evento,
+            data_evento=datetime.now(timezone.utc),
+            detalhes={"id_amb": id_amb, "novo_titulo": payload.titulo_questionario}
+        )
+        db.add(log)
+        db.commit()
+    
+    return AmbienteOut(
+        id_amb=str(ambiente.id_amb),
+        titulo_amb=ambiente.titulo_amb,
+        titulo_questionario=ambiente.titulo_questionario,
+        descricao_questionario=ambiente.descricao_questionario,
+        data_criado=ambiente.data_criado,
+        id_adm=str(ambiente.id_adm),
+        nome_administrador=nome_adm,
+        ativo=ambiente.ativo,
+        ids_conjuntos=ids_conjuntos
+    ) 
