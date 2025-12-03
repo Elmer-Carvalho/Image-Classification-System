@@ -45,8 +45,55 @@ async def lifespan(app: FastAPI):
     
     # Recriar banco de dados do zero (desenvolvimento)
     print("📊 Recriando banco de dados do zero...")
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
+    schema_dropped = False
+    try:
+        # Primeiro, tentar remover constraints antigas com CASCADE usando SQL direto
+        with engine.begin() as conn:
+            from sqlalchemy import text
+            # Remover todas as tabelas com CASCADE (drop schema e recria)
+            conn.execute(text("DROP SCHEMA IF EXISTS public CASCADE;"))
+            conn.execute(text("CREATE SCHEMA public;"))
+            # Obter o usuário atual do banco de dados
+            result = conn.execute(text("SELECT current_user;"))
+            current_user = result.scalar()
+            # Dar permissões ao usuário atual
+            conn.execute(text(f"GRANT ALL ON SCHEMA public TO {current_user};"))
+            conn.execute(text("GRANT ALL ON SCHEMA public TO public;"))
+        schema_dropped = True
+        print("✅ Schema público removido e recriado com sucesso!")
+    except Exception as e:
+        # Se falhar, tentar método padrão do SQLAlchemy com checkfirst=False
+        print(f"⚠️ Método CASCADE falhou, tentando método padrão: {e}")
+        try:
+            # Tentar dropar todas as tabelas, ignorando erros de dependências
+            with engine.begin() as conn:
+                from sqlalchemy import text, inspect
+                inspector = inspect(engine)
+                # Listar todas as tabelas e dropar uma por uma com CASCADE
+                tables = inspector.get_table_names()
+                for table in tables:
+                    try:
+                        conn.execute(text(f"DROP TABLE IF EXISTS {table} CASCADE;"))
+                    except Exception:
+                        pass  # Ignorar erros individuais
+            Base.metadata.drop_all(bind=engine, checkfirst=False)
+        except Exception as e2:
+            print(f"⚠️ Erro ao dropar tabelas: {e2}")
+            # Se ainda falhar, continuar e tentar criar (pode dar erro de tabela já existe)
+            pass
+    
+    # Criar todas as tabelas (apenas se o schema foi dropado ou se drop_all funcionou)
+    if schema_dropped:
+        # Schema já foi recriado, apenas criar as tabelas
+        Base.metadata.create_all(bind=engine)
+    else:
+        # Tentar criar mesmo assim (pode dar erro se tabelas ainda existirem)
+        try:
+            Base.metadata.create_all(bind=engine)
+        except Exception as e:
+            print(f"⚠️ Erro ao criar tabelas: {e}")
+            raise
+    
     print("✅ Banco de dados recriado com sucesso!")
 
     # Popular eventos de auditoria após garantir que as tabelas existem

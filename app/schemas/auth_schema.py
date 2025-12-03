@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, constr
+from pydantic import BaseModel, EmailStr, constr, Field
 import uuid
 from typing import Optional
 from datetime import datetime
@@ -94,12 +94,17 @@ class AmbienteCreate(BaseModel):
     """
     titulo_amb: constr(strip_whitespace=True, min_length=3, max_length=255)
     descricao: constr(strip_whitespace=True, min_length=3)
+    ids_conjuntos: list[str] = Field(..., min_length=1, description="Lista de IDs de ConjuntoImagens (mínimo 1)")
 
     class Config:
         json_schema_extra = {
             "example": {
                 "titulo_amb": "Ambiente de Teste",
-                "descricao": "Ambiente para testes e validações."
+                "descricao": "Ambiente para testes e validações.",
+                "ids_conjuntos": [
+                    "a1b2c3d4-5678-1234-9abc-1234567890ab",
+                    "b2c3d4e5-6789-2345-0bcd-2345678901bc"
+                ]
             }
         }
 
@@ -115,6 +120,7 @@ class AmbienteOut(BaseModel):
     id_adm: str
     nome_administrador: str
     ativo: bool
+    ids_conjuntos: Optional[list[str]] = None  # Lista de IDs de conjuntos associados (opcional na resposta)
 
     class Config:
         from_attributes = True
@@ -126,7 +132,11 @@ class AmbienteOut(BaseModel):
                 "data_criado": "2024-06-01T12:34:56.789Z",
                 "id_adm": "b1e2c3d4-5678-1234-9abc-1234567890ab",
                 "nome_administrador": "Maria Admin",
-                "ativo": True
+                "ativo": True,
+                "ids_conjuntos": [
+                    "a1b2c3d4-5678-1234-9abc-1234567890ab",
+                    "b2c3d4e5-6789-2345-0bcd-2345678901bc"
+                ]
             }
         } 
 

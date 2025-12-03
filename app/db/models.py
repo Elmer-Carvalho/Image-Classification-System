@@ -65,7 +65,7 @@ class Ambiente(Base):
     id_adm = Column(UUID(as_uuid=True), ForeignKey('usuarios_administradores.id_adm', ondelete='CASCADE'), nullable=False)
     administrador = relationship('UsuarioAdministrador', back_populates='ambientes')
     usuarios = relationship('UsuarioAmbiente', back_populates='ambiente')
-    conjuntos_imagens = relationship('ConjuntoImagens', back_populates='ambiente')
+    conjuntos_imagens = relationship('AmbienteConjuntoImagens', back_populates='ambiente')
     formularios = relationship('Formulario', back_populates='ambiente')
     ativo = Column(Boolean, nullable=False, default=True)  # Exclusão lógica por parte do administrador
     utilizavel = Column(Boolean, nullable=False, default=True)  # Indica se o ambiente está utilizável (todas as pastas existem no NextCloud)
@@ -95,11 +95,24 @@ class Opcao(Base):
     formulario = relationship('Formulario', back_populates='opcoes')
     classificacoes = relationship('Classificacao', back_populates='opcao')
 
+class AmbienteConjuntoImagens(Base):
+    """
+    Tabela auxiliar para relação N:N entre Ambiente e ConjuntoImagens.
+    Permite que um ambiente tenha múltiplos conjuntos e um conjunto possa estar em múltiplos ambientes.
+    """
+    __tablename__ = 'ambientes_conjuntos_imagens'
+    id_amb = Column(UUID(as_uuid=True), ForeignKey('ambientes.id_amb', ondelete='CASCADE'), primary_key=True)
+    id_cnj = Column(UUID(as_uuid=True), ForeignKey('conjuntos_imagens.id_cnj', ondelete='CASCADE'), primary_key=True)
+    data_associado = Column(DateTime(timezone=True), nullable=False)  # Timestamp da criação da associação
+    ativo = Column(Boolean, nullable=False, default=True)  # Exclusão lógica (cascata quando ambiente é excluído)
+    ambiente = relationship('Ambiente', back_populates='conjuntos_imagens')
+    conjunto = relationship('ConjuntoImagens', back_populates='ambientes')
+
 class ConjuntoImagens(Base):
     """
     Representa uma pasta do NextCloud.
     Cada pasta do NextCloud é automaticamente sincronizada e criada como um ConjuntoImagens.
-    A associação com Ambiente é feita manualmente pelo administrador.
+    A associação com Ambiente é feita manualmente pelo administrador através da tabela AmbienteConjuntoImagens.
     """
     __tablename__ = 'conjuntos_imagens'
     id_cnj = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -110,8 +123,7 @@ class ConjuntoImagens(Base):
     existe_no_nextcloud = Column(Boolean, nullable=False, default=True)  # Indica se a pasta ainda existe no NextCloud (política de persistência de dados)
     data_proc = Column(DateTime(timezone=True), nullable=False)  # Timestamp da primeira vez que a pasta foi processada/sincronizada
     data_sinc = Column(DateTime(timezone=True), nullable=False)  # Timestamp da última sincronização (atualizado quando há mudanças)
-    id_amb = Column(UUID(as_uuid=True), ForeignKey('ambientes.id_amb', ondelete='CASCADE'), nullable=True)  # FK para Ambiente (associação manual pelo admin - pode ser NULL até ser associado)
-    ambiente = relationship('Ambiente', back_populates='conjuntos_imagens')
+    ambientes = relationship('AmbienteConjuntoImagens', back_populates='conjunto')
     imagens = relationship('Imagem', back_populates='conjunto')
 
 class Imagem(Base):

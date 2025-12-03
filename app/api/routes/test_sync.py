@@ -27,7 +27,6 @@ class ConjuntoImagensOut(BaseModel):
     existe_no_nextcloud: bool
     data_proc: datetime
     data_sinc: datetime
-    id_amb: Optional[str] = None
     
     class Config:
         from_attributes = True
@@ -83,8 +82,7 @@ def list_conjuntos_imagens(db: Session = Depends(get_db)):
                 imagens_sincronizadas=conjunto.imagens_sincronizadas,
                 existe_no_nextcloud=conjunto.existe_no_nextcloud,
                 data_proc=conjunto.data_proc,
-                data_sinc=conjunto.data_sinc,
-                id_amb=str(conjunto.id_amb) if conjunto.id_amb else None
+                data_sinc=conjunto.data_sinc
             )
             for conjunto in conjuntos
         ]
@@ -170,8 +168,7 @@ def list_imagens_conjunto(
             imagens_sincronizadas=conjunto.imagens_sincronizadas,
             existe_no_nextcloud=conjunto.existe_no_nextcloud,
             data_proc=conjunto.data_proc,
-            data_sinc=conjunto.data_sinc,
-            id_amb=str(conjunto.id_amb) if conjunto.id_amb else None
+            data_sinc=conjunto.data_sinc
         )
         
         return ImagemListResponse(
