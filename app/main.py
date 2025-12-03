@@ -23,6 +23,7 @@ from app.api.routes import usuarios_ambientes
 from app.api.routes import auditoria
 from app.api.routes import nextcloud_images
 from app.api.routes import test_sync
+from app.api.routes import images
 # Removido: from app.services.image_service import ImageMonitor
 
 # Criação de tabelas e dependências removidas conforme solicitado
@@ -193,6 +194,7 @@ app.include_router(usuarios_ambientes.router)
 app.include_router(auditoria.router)
 app.include_router(nextcloud_images.router)
 app.include_router(test_sync.router)
+app.include_router(images.router)
 
 @app.get("/")
 def read_root():
