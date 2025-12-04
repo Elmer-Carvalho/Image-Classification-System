@@ -58,6 +58,7 @@ class UsuarioConvencional(Base):
     usuario = relationship('Usuario', back_populates='convencional')
     ambientes = relationship('UsuarioAmbiente', back_populates='usuario_convencional')
     classificacoes = relationship('Classificacao', back_populates='usuario_convencional')
+    progresso_ambientes = relationship('UsuarioAmbienteProgresso', back_populates='usuario_convencional')
 
 class Ambiente(Base):
     __tablename__ = 'ambientes'
@@ -71,6 +72,7 @@ class Ambiente(Base):
     usuarios = relationship('UsuarioAmbiente', back_populates='ambiente')
     conjuntos_imagens = relationship('AmbienteConjuntoImagens', back_populates='ambiente')
     opcoes = relationship('Opcao', back_populates='ambiente', cascade='all, delete-orphan')
+    progresso_usuarios = relationship('UsuarioAmbienteProgresso', back_populates='ambiente')
     ativo = Column(Boolean, nullable=False, default=True)  # Exclusão lógica por parte do administrador
     utilizavel = Column(Boolean, nullable=False, default=True)  # Indica se o ambiente está utilizável (todas as pastas existem no NextCloud)
 
@@ -82,6 +84,21 @@ class UsuarioAmbiente(Base):
     ativo = Column(Boolean, nullable=False, default=True)  # Exclusão lógica (cascata quando ambiente é excluído)
     usuario_convencional = relationship('UsuarioConvencional', back_populates='ambientes')
     ambiente = relationship('Ambiente', back_populates='usuarios')
+
+class UsuarioAmbienteProgresso(Base):
+    """
+    Rastreia o progresso de classificação de um usuário em um ambiente.
+    Usado para retomar de onde o usuário parou.
+    """
+    __tablename__ = 'usuarios_ambientes_progresso'
+    id_con = Column(UUID(as_uuid=True), ForeignKey('usuarios_convencionais.id_con', ondelete='CASCADE'), primary_key=True)
+    id_amb = Column(UUID(as_uuid=True), ForeignKey('ambientes.id_amb', ondelete='CASCADE'), primary_key=True)
+    ultimo_data_proc_processado = Column(DateTime(timezone=True), nullable=True)  # data_proc da última imagem processada
+    ultimo_content_hash_processado = Column(String(64), ForeignKey('imagens.content_hash', ondelete='SET NULL'), nullable=True)  # Hash da última imagem processada
+    total_classificadas = Column(Integer, nullable=False, default=0)  # Total de imagens classificadas
+    data_ultima_atividade = Column(DateTime(timezone=True), nullable=False)  # Timestamp da última classificação
+    usuario_convencional = relationship('UsuarioConvencional', back_populates='progresso_ambientes')
+    ambiente = relationship('Ambiente', back_populates='progresso_usuarios')
 
 class Opcao(Base):
     """

@@ -74,7 +74,7 @@ def meus_ambientes(
         AmbienteInfoOut(
             id_amb=amb["id_amb"],
             titulo_amb=amb["titulo_amb"],
-            descricao=amb["descricao"],
+            descricao_questionario=amb["descricao_questionario"],
             ativo=amb["ativo"]
         )
         for amb in ambientes
@@ -133,7 +133,7 @@ def listar_ambientes_usuario(
         AmbienteInfoOut(
             id_amb=amb["id_amb"],
             titulo_amb=amb["titulo_amb"],
-            descricao=amb["descricao"],
+            descricao_questionario=amb["descricao_questionario"],
             ativo=amb["ativo"]
         )
         for amb in ambientes
@@ -399,7 +399,7 @@ def listar_usuarios_do_ambiente(
     return AmbienteUsuariosOut(
         id_amb=str(ambiente.id_amb),
         titulo_amb=ambiente.titulo_amb,
-        descricao=ambiente.descricao,
+        descricao_questionario=ambiente.descricao_questionario,
         ativo=ambiente.ativo,
         usuarios=usuarios_out,
         total=len(usuarios_out)

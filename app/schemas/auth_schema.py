@@ -172,7 +172,7 @@ class AmbienteInfoOut(BaseModel):
     """Informações básicas de um ambiente."""
     id_amb: str
     titulo_amb: str
-    descricao: str
+    descricao_questionario: str
     ativo: bool
 
     class Config:
@@ -237,7 +237,7 @@ class AmbienteUsuariosOut(BaseModel):
     """
     id_amb: str
     titulo_amb: str
-    descricao: str
+    descricao_questionario: str
     ativo: bool
     usuarios: list[UsuarioInfoOut]
     total: int

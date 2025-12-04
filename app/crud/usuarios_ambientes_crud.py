@@ -41,7 +41,7 @@ def listar_ambientes_usuario(db: Session, id_con: str) -> Optional[Tuple[models.
                 ambientes.append({
                     "id_amb": str(amb.id_amb),
                     "titulo_amb": amb.titulo_amb,
-                    "descricao": amb.descricao,
+                    "descricao_questionario": amb.descricao_questionario,
                     "ativo": amb.ativo
                 })
     
