@@ -16,7 +16,7 @@ from app.db.models import EventoAuditoria, LogAuditoria
 
 router = APIRouter(prefix="/ambientes", tags=["Ambientes"])
 
-@router.post("/", response_model=AmbienteOut, status_code=201)
+@router.post("/importar", response_model=AmbienteOut, status_code=201)
 def criar_ambiente(
     ambiente: AmbienteCreate = Body(...),
     admin: models.Usuario = Depends(require_admin),
