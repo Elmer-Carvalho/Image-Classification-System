@@ -119,7 +119,7 @@ def cadastrar_usuario(
 ):
     """
     Cadastra um novo usuário (convencional ou administrador).
-    ...
+    Agora salva o telefone informado no formulário.
     """
     if get_user_by_email(db, dados.email):
         exc = HTTPException(status_code=400, detail="Email já cadastrado por outro usuário.")
@@ -162,12 +162,28 @@ def cadastrar_usuario(
         exc.code = "user_type_not_found"
         raise exc
     
-    # Criar usuário baseado no tipo
+    # Criar usuário baseado no tipo (AGORA PASSANDO O TELEFONE)
     if tipo_usuario.nome.lower() == "convencional":
-        usuario = create_usuario_convencional(db, dados.nome_completo, dados.email, dados.senha, dados.cpf, tipo_usuario.id_tipo)
+        usuario = create_usuario_convencional(
+            db=db, 
+            nome_completo=dados.nome_completo, 
+            email=dados.email, 
+            senha=dados.senha, 
+            cpf=dados.cpf, 
+            id_tipo=tipo_usuario.id_tipo,
+            telefone=dados.telefone  
+        )
         evento_nome = "cadastrar_usuario_convencional"
     elif tipo_usuario.nome.lower() == "admin":
-        usuario = create_usuario_administrador(db, dados.nome_completo, dados.email, dados.senha, dados.cpf, tipo_usuario.id_tipo)
+        usuario = create_usuario_administrador(
+            db=db, 
+            nome_completo=dados.nome_completo, 
+            email=dados.email, 
+            senha=dados.senha, 
+            cpf=dados.cpf, 
+            id_tipo=tipo_usuario.id_tipo,
+            telefone=dados.telefone  
+        )
         evento_nome = "cadastrar_usuario_administrador"
     else:
         exc = HTTPException(status_code=400, detail="Tipo de usuário inválido.")
@@ -183,19 +199,21 @@ def cadastrar_usuario(
             id_usu=usuario.id_usu,
             evento_id=evento.id_evento,
             data_evento=datetime.now(timezone.utc),
-            detalhes={"email": usuario.email, "nome_completo": usuario.nome_completo, "tipo": tipo_usuario.nome}
+            detalhes={
+                "email": usuario.email, 
+                "nome_completo": usuario.nome_completo, 
+                "tipo": tipo_usuario.nome,
+                "telefone": usuario.telefone
+            }
         )
         db.add(log)
         db.commit()
     
     access_token = auth_service.create_access_token(data={"sub": str(usuario.id_usu)}, user=usuario)
     
-    # Define o cookie HttpOnly
     set_auth_cookie(response, access_token)
     
-    # Retorna o token no JSON para compatibilidade (Swagger, testes, etc.)
     return {"access_token": access_token, "token_type": "bearer", "user_type": usuario.id_tipo}
-
 @router.post("/logout", status_code=200, tags=["Autenticação"])
 def logout(response: Response, current_user: models.Usuario = Depends(auth_service.get_current_user), db: Session = Depends(get_db)):
     """

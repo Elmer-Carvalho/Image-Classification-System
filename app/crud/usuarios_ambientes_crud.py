@@ -14,14 +14,7 @@ logger = logging.getLogger(__name__)
 
 def listar_ambientes_usuario(db: Session, id_con: str) -> Optional[Tuple[models.UsuarioConvencional, List[dict]]]:
     """
-    Lista todos os ambientes associados a um usuário convencional (apenas ativos).
-    
-    Args:
-        db: Sessão do banco de dados
-        id_con: ID do usuário convencional (UUID string)
-    
-    Returns:
-        Tupla (usuario_convencional, lista_ambientes) ou (None, []) se não encontrado
+    Lista ambientes do usuário com contagem de progresso.
     """
     try:
         id_con_uuid = uuid.UUID(id_con) if isinstance(id_con, str) else id_con
@@ -38,11 +31,40 @@ def listar_ambientes_usuario(db: Session, id_con: str) -> Optional[Tuple[models.
         if vinc.ativo:
             amb = db.query(models.Ambiente).filter_by(id_amb=vinc.id_amb).first()
             if amb and amb.ativo:
+                
+                # 1. Calcular Total de Imagens do Ambiente
+                # Busca os conjuntos vinculados ao ambiente
+                conjuntos = db.query(models.AmbienteConjuntoImagens).filter(
+                    models.AmbienteConjuntoImagens.id_amb == amb.id_amb,
+                    models.AmbienteConjuntoImagens.ativo == True
+                ).all()
+                
+                ids_conjuntos = [c.id_cnj for c in conjuntos]
+                
+                total_imagens = 0
+                if ids_conjuntos:
+                    # Conta imagens que existem no NextCloud e pertencem a esses conjuntos
+                    total_imagens = db.query(models.Imagem).filter(
+                        models.Imagem.id_cnj.in_(ids_conjuntos),
+                        models.Imagem.existe_no_nextcloud == True
+                    ).count()
+
+                # 2. Calcular Quantas o Usuário Já Classificou
+                progresso = db.query(models.UsuarioAmbienteProgresso).filter_by(
+                    id_con=id_con_uuid,
+                    id_amb=amb.id_amb
+                ).first()
+                
+                total_classificadas = progresso.total_classificadas if progresso else 0
+
+                # Adiciona na resposta
                 ambientes.append({
                     "id_amb": str(amb.id_amb),
                     "titulo_amb": amb.titulo_amb,
                     "descricao_questionario": amb.descricao_questionario,
-                    "ativo": amb.ativo
+                    "ativo": amb.ativo,
+                    "total_imagens": total_imagens,        # Novo
+                    "total_classificadas": total_classificadas # Novo
                 })
     
     return usuario, ambientes

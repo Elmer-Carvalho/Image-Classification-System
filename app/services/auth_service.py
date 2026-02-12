@@ -8,6 +8,7 @@ from app.crud.user_crud import get_user_by_email
 from sqlalchemy.orm import Session
 from app.db import models
 import logging
+from app.core.utils import verify_password, hash_password
 from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer
 from app.db.database import get_db
@@ -18,6 +19,8 @@ logger = logging.getLogger(__name__)
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
+def get_password_hash(password: str) -> str:
+    return hash_password(password)
 
 def authenticate_user(db: Session, email: str, password: str) -> Optional[models.Usuario]:
     """Autentica o usuário, verificando email, senha e se está ativo."""

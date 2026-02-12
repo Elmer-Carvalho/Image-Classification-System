@@ -6,6 +6,8 @@ from app.schemas.auth_schema import UsuarioOut
 from app.core.utils import validar_cpf, validar_nome, validar_forca_senha
 from app.crud.user_crud import get_user_by_email, get_user_by_cpf, create_usuario_convencional, create_usuario_administrador
 from app.crud.cadastro_permitido_crud import get_cadastro_permitido_by_email, marcar_cadastro_como_usado
+from app.services.auth_service import get_current_user, verify_password, get_password_hash
+from app.schemas.auth_schema import UsuarioUpdatePerfil, UsuarioUpdateSenha
 from app.db import models
 from datetime import datetime, timezone
 
@@ -19,10 +21,8 @@ def listar_usuarios(
     db: Session = Depends(get_db)
 ):
     """
-    Lista todos os usuários do sistema (convencionais e administradores).
-
-    - **Acesso:** Apenas administradores autenticados.
-    - **Resposta:** Lista de usuários com informações básicas, tipo, status e dados específicos.
+    Lista todos os usuários do sistema.
+    ATUALIZADO: Agora retorna id_con se for especialista.
     """
     usuarios = db.query(models.Usuario).all()
     result = []
@@ -30,18 +30,23 @@ def listar_usuarios(
         tipo = u.tipo.nome if u.tipo else "desconhecido"
         is_admin = u.tipo and u.tipo.nome.lower() == "admin"
         
-        # Buscar CPF baseado no tipo de usuário
         cpf = None
+        id_con = None  # <--- Variável nova
+        
+        # Lógica para capturar IDs específicos
         if u.convencional:
             cpf = u.convencional.cpf
+            id_con = str(u.convencional.id_con) # <--- PEGA O ID DO MÉDICO
         elif u.administrador:
             cpf = u.administrador.cpf
             
         result.append(
             UsuarioOut(
                 id_usu=str(u.id_usu),
+                id_con=id_con,          # <--- PREENCHE NO JSON
                 nome_completo=u.nome_completo,
                 email=u.email,
+                telefone=u.telefone,
                 tipo=tipo,
                 cpf=cpf,
                 is_admin=is_admin,
@@ -109,3 +114,85 @@ def reativar_usuario(
     usuario.ativo = True
     db.commit()
     return {"message": "Usuário reativado com sucesso."} 
+
+
+# --- ROTAS DE "MINHA CONTA" ---
+
+@router.get("/me", response_model=UsuarioOut)
+def ler_meus_dados(
+    current_user: models.Usuario = Depends(get_current_user)
+):
+    """Retorna os dados do usuário logado."""
+    tipo = current_user.tipo.nome if current_user.tipo else "desconhecido"
+    is_admin = current_user.tipo and current_user.tipo.nome.lower() == "admin"
+    
+    cpf = None
+    if current_user.convencional:
+        cpf = current_user.convencional.cpf
+    elif current_user.administrador:
+        cpf = current_user.administrador.cpf
+
+    return UsuarioOut(
+        id_usu=str(current_user.id_usu),
+        nome_completo=current_user.nome_completo,
+        email=current_user.email,
+        telefone=current_user.telefone, # Agora retornamos o telefone
+        tipo=tipo,
+        cpf=cpf,
+        is_admin=is_admin,
+        ativo=current_user.ativo
+    )
+
+@router.patch("/me", response_model=UsuarioOut)
+def atualizar_meu_perfil(
+    dados: UsuarioUpdatePerfil,
+    db: Session = Depends(get_db),
+    current_user: models.Usuario = Depends(get_current_user)
+):
+    """Atualiza nome, email ou telefone."""
+    if dados.nome_completo:
+        current_user.nome_completo = dados.nome_completo
+    if dados.telefone:
+        current_user.telefone = dados.telefone
+    if dados.email:
+        # Verifica se o email já está em uso por OUTRA pessoa
+        existente = db.query(models.Usuario).filter(models.Usuario.email == dados.email).first()
+        if existente and existente.id_usu != current_user.id_usu:
+            raise HTTPException(status_code=400, detail="Este e-mail já está em uso.")
+        current_user.email = dados.email
+    
+    db.commit()
+    db.refresh(current_user)
+    
+    # Reutiliza a lógica de retorno (copie a lógica do 'cpf' e 'tipo' do GET acima)
+    tipo = current_user.tipo.nome if current_user.tipo else "desconhecido"
+    is_admin = current_user.tipo and current_user.tipo.nome.lower() == "admin"
+    cpf = current_user.convencional.cpf if current_user.convencional else (current_user.administrador.cpf if current_user.administrador else None)
+
+    return UsuarioOut(
+        id_usu=str(current_user.id_usu),
+        nome_completo=current_user.nome_completo,
+        email=current_user.email,
+        telefone=current_user.telefone,
+        tipo=tipo,
+        cpf=cpf,
+        is_admin=is_admin,
+        ativo=current_user.ativo
+    )
+
+@router.patch("/me/senha", status_code=200)
+def alterar_minha_senha(
+    dados: UsuarioUpdateSenha,
+    db: Session = Depends(get_db),
+    current_user: models.Usuario = Depends(get_current_user)
+):
+    """Verifica a senha atual e define uma nova."""
+    # 1. Verificar senha antiga
+    if not verify_password(dados.senha_atual, current_user.senha_hash):
+        raise HTTPException(status_code=400, detail="A senha atual está incorreta.")
+    
+    # 2. Salvar nova senha
+    current_user.senha_hash = get_password_hash(dados.nova_senha)
+    db.commit()
+    
+    return {"message": "Senha alterada com sucesso!"}

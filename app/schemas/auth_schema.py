@@ -1,8 +1,36 @@
-from pydantic import BaseModel, EmailStr, constr, Field
+from pydantic import BaseModel, EmailStr, constr, Field, validator
 import uuid
 from typing import Optional
+import re
 from datetime import datetime
 
+#Para atualizar dados básicos
+class UsuarioUpdatePerfil(BaseModel):
+    nome_completo: Optional[constr(strip_whitespace=True, min_length=5)] = None
+    email: Optional[EmailStr] = None
+    telefone: Optional[str] = None
+
+#Para atualizar a senha
+class UsuarioUpdateSenha(BaseModel):
+    senha_atual: str
+    nova_senha: str
+
+    @validator('nova_senha')
+    def validar_forca_senha(cls, v):
+        """
+        Valida se a senha tem pelo menos 8 caracteres,
+        uma letra maiúscula, uma minúscula e um número.
+        """
+        if len(v) < 8:
+            raise ValueError('A senha deve ter no mínimo 8 caracteres.')
+        if not re.search(r'[A-Z]', v):
+            raise ValueError('A senha deve conter pelo menos uma letra maiúscula.')
+        if not re.search(r'[a-z]', v):
+            raise ValueError('A senha deve conter pelo menos uma letra minúscula.')
+        if not re.search(r'[0-9]', v):
+            raise ValueError('A senha deve conter pelo menos um número.')
+        return v
+    
 # Schema para a resposta do token
 class Token(BaseModel):
     access_token: str
@@ -63,6 +91,7 @@ class UsuarioCreate(BaseModel):
     nome_completo: constr(strip_whitespace=True, min_length=5)
     email: EmailStr
     senha: constr(min_length=8)
+    telefone: str | None = None
     cpf: constr(min_length=11, max_length=14)
 
     class Config:
@@ -77,8 +106,10 @@ class UsuarioCreate(BaseModel):
 
 class UsuarioOut(BaseModel):
     id_usu: str
+    id_con: str | None = None
     nome_completo: str
     email: EmailStr
+    telefone: str | None = None
     tipo: str
     cpf: str | None = None
     is_admin: bool
@@ -174,6 +205,8 @@ class AmbienteInfoOut(BaseModel):
     titulo_amb: str
     descricao_questionario: str
     ativo: bool
+    total_imagens: int = 0
+    total_classificadas: int = 0
 
     class Config:
         from_attributes = True
