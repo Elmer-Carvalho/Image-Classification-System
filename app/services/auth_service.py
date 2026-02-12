@@ -8,6 +8,7 @@ from app.crud.user_crud import get_user_by_email
 from sqlalchemy.orm import Session
 from app.db import models
 import logging
+from app.core.utils import verify_password, hash_password
 from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer
 from app.db.database import get_db
@@ -18,6 +19,8 @@ logger = logging.getLogger(__name__)
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
+def get_password_hash(password: str) -> str:
+    return hash_password(password)
 
 def authenticate_user(db: Session, email: str, password: str) -> Optional[models.Usuario]:
     """Autentica o usuário, verificando email, senha e se está ativo."""
@@ -56,28 +59,29 @@ def create_access_token(data: dict, user: models.Usuario = None) -> str:
     return encoded_jwt 
 
 
-def get_token_from_cookie_or_header(request: Request, token: Optional[str] = Depends(oauth2_scheme)) -> Optional[str]:
-    """Obtém o token JWT do cookie HttpOnly ou do header Authorization."""
-    # Primeiro tenta obter do cookie HttpOnly
+def get_token_from_cookie_or_header(request: Request, token: Optional[str] = None) -> Optional[str]:
+    # 1. Tenta obter do cookie primeiro (é o método do Frontend)
     cookie_token = request.cookies.get(settings.COOKIE_NAME)
     if cookie_token:
         return cookie_token
     
-    # Se não encontrou no cookie, usa o token do header (para compatibilidade)
-    return token
+    # 2. Se não houver cookie, tenta o header Authorization (método do Swagger)
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        return auth_header.split(" ")[1]
+        
+    return None
 
-def get_current_user(request: Request, db: Session = Depends(get_db), token: Optional[str] = Depends(oauth2_scheme)):
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Não foi possível validar as credenciais",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    
-    # Obtém o token do cookie ou header
-    actual_token = get_token_from_cookie_or_header(request, token)
+def get_current_user(request: Request, db: Session = Depends(get_db)):
+    # Chamamos a nossa função de extração manualmente
+    actual_token = get_token_from_cookie_or_header(request)
     
     if not actual_token:
-        raise credentials_exception
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
         
     try:
         payload = jwt.decode(actual_token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])

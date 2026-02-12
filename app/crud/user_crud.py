@@ -25,12 +25,13 @@ def get_user_by_cpf(db: Session, cpf: str):
     
     return None
 
-def create_usuario_convencional(db: Session, nome_completo: str, email: str, senha: str, cpf: str, id_tipo: int):
+def create_usuario_convencional(db: Session, nome_completo: str, email: str, senha: str, cpf: str, id_tipo: int, telefone: str = None):
     senha_hash = hash_password(senha)
     cpf = ''.join(filter(str.isdigit, cpf))  # Sanitiza o CPF
     usuario = models.Usuario(
         nome_completo=nome_completo,
         email=email,
+        telefone=telefone,
         senha_hash=senha_hash,
         data_criado=datetime.now(timezone.utc),
         ativo=True,
@@ -47,12 +48,13 @@ def create_usuario_convencional(db: Session, nome_completo: str, email: str, sen
     db.refresh(usuario)
     return usuario
 
-def create_usuario_administrador(db: Session, nome_completo: str, email: str, senha: str, cpf: str, id_tipo: int):
+def create_usuario_administrador(db: Session, nome_completo: str, email: str, senha: str, cpf: str, id_tipo: int, telefone: str = None):
     senha_hash = hash_password(senha)
     cpf = ''.join(filter(str.isdigit, cpf))  # Sanitiza o CPF
     usuario = models.Usuario(
         nome_completo=nome_completo,
         email=email,
+        telefone=telefone,
         senha_hash=senha_hash,
         data_criado=datetime.now(timezone.utc),
         ativo=True,

@@ -28,37 +28,46 @@ router = APIRouter(prefix="/auth", tags=["Autenticação"])
 def set_auth_cookie(response: Response, access_token: str):
     """Define o cookie HttpOnly com o token de acesso."""
     response.set_cookie(
-        key=settings.COOKIE_NAME,
+        key="access_token",
         value=access_token,
-        max_age=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,  # Converter minutos para segundos
-        httponly=settings.COOKIE_HTTPONLY,
-        samesite=settings.COOKIE_SAMESITE,
-        secure=settings.COOKIE_SECURE,
-        domain=settings.COOKIE_DOMAIN,
+        max_age=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        httponly=True,   # Mantém True para segurança
+        samesite="lax",  # "Lax" funciona bem para localhost entre portas diferentes
+        secure=False,    # Deve ser False para HTTP (sem SSL) em localhost
         path="/"
     )
+    
+    # WORKAROUND CRÍTICO para problemas de SameSite=Lax em desenvolvimento (HTTP + Cross-Port)
+    # Se não estiver em modo seguro (Secure=False), remove o atributo SameSite
+    # para evitar que navegadores como Chrome bloqueiem o cookie em requisições cross-port (localhost)
+    if not settings.COOKIE_SECURE:
+        header = response.headers.get("set-cookie", "")
+        if header:
+            # Substitui 'SameSite=Lax' ou 'SameSite=Strict' por nada no header
+            samesite_attr = f"; samesite={settings.COOKIE_SAMESITE.lower()}"
+            header = header.replace(samesite_attr, "")
+            # Substitui 'SameSite=Lax' ou 'SameSite=Strict' com capitalização (fallback)
+            samesite_attr_cap = f"; SameSite={settings.COOKIE_SAMESITE.capitalize()}"
+            header = header.replace(samesite_attr_cap, "")
+            response.headers["set-cookie"] = header
 
 def clear_auth_cookie(response: Response):
     """Remove o cookie de autenticação."""
+    # Primeiro, tenta deletar via Starlette
     response.delete_cookie(
-        key=settings.COOKIE_NAME,
+        key="access_token",
         samesite=settings.COOKIE_SAMESITE,
         secure=settings.COOKIE_SECURE,
         domain=settings.COOKIE_DOMAIN,
         path="/"
     )
-
+    
+   
 @router.post("/login")
 def login(response: Response, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     """
     Autentica o usuário e retorna um token de acesso JWT.
-
-    - **Payload:**
-      - Formulário com campos `username` (email) e `password`.
-    - **Respostas:**
-      - 200: Login bem-sucedido (JWT retornado)
-      - 401: Credenciais inválidas
-      - 403: Conta desativada
+    ...
     """
     logger.info(f"Recebida tentativa de login para o usuário: {form_data.username}")
     user = auth_service.authenticate_user(db, email=form_data.username, password=form_data.password)
@@ -110,19 +119,7 @@ def cadastrar_usuario(
 ):
     """
     Cadastra um novo usuário (convencional ou administrador).
-
-    - **Regras:** O e-mail deve estar autorizado, não pode estar em uso, CPF deve ser único e válido.
-    - **Tipo de usuário:** Determinado automaticamente pelo tipo de cadastro permitido na whitelist.
-    - **Payload de exemplo:**
-      {
-        "nome_completo": "João da Silva",
-        "email": "joao.silva@email.com",
-        "senha": "SenhaForte123",
-        "cpf": "12345678901"
-      }
-    - **Respostas:**
-      - 201: Usuário criado com sucesso (JWT retornado)
-      - 400/403/409/422: Erros de validação ou negócio
+    Agora salva o telefone informado no formulário.
     """
     if get_user_by_email(db, dados.email):
         exc = HTTPException(status_code=400, detail="Email já cadastrado por outro usuário.")
@@ -165,12 +162,28 @@ def cadastrar_usuario(
         exc.code = "user_type_not_found"
         raise exc
     
-    # Criar usuário baseado no tipo
+    # Criar usuário baseado no tipo (AGORA PASSANDO O TELEFONE)
     if tipo_usuario.nome.lower() == "convencional":
-        usuario = create_usuario_convencional(db, dados.nome_completo, dados.email, dados.senha, dados.cpf, tipo_usuario.id_tipo)
+        usuario = create_usuario_convencional(
+            db=db, 
+            nome_completo=dados.nome_completo, 
+            email=dados.email, 
+            senha=dados.senha, 
+            cpf=dados.cpf, 
+            id_tipo=tipo_usuario.id_tipo,
+            telefone=dados.telefone  
+        )
         evento_nome = "cadastrar_usuario_convencional"
     elif tipo_usuario.nome.lower() == "admin":
-        usuario = create_usuario_administrador(db, dados.nome_completo, dados.email, dados.senha, dados.cpf, tipo_usuario.id_tipo)
+        usuario = create_usuario_administrador(
+            db=db, 
+            nome_completo=dados.nome_completo, 
+            email=dados.email, 
+            senha=dados.senha, 
+            cpf=dados.cpf, 
+            id_tipo=tipo_usuario.id_tipo,
+            telefone=dados.telefone  
+        )
         evento_nome = "cadastrar_usuario_administrador"
     else:
         exc = HTTPException(status_code=400, detail="Tipo de usuário inválido.")
@@ -186,26 +199,26 @@ def cadastrar_usuario(
             id_usu=usuario.id_usu,
             evento_id=evento.id_evento,
             data_evento=datetime.now(timezone.utc),
-            detalhes={"email": usuario.email, "nome_completo": usuario.nome_completo, "tipo": tipo_usuario.nome}
+            detalhes={
+                "email": usuario.email, 
+                "nome_completo": usuario.nome_completo, 
+                "tipo": tipo_usuario.nome,
+                "telefone": usuario.telefone
+            }
         )
         db.add(log)
         db.commit()
     
     access_token = auth_service.create_access_token(data={"sub": str(usuario.id_usu)}, user=usuario)
     
-    # Define o cookie HttpOnly
     set_auth_cookie(response, access_token)
     
-    # Retorna o token no JSON para compatibilidade (Swagger, testes, etc.)
     return {"access_token": access_token, "token_type": "bearer", "user_type": usuario.id_tipo}
-
 @router.post("/logout", status_code=200, tags=["Autenticação"])
 def logout(response: Response, current_user: models.Usuario = Depends(auth_service.get_current_user), db: Session = Depends(get_db)):
     """
     Realiza logout do usuário, removendo o cookie de autenticação.
-    
-    - **Acesso:** Usuário autenticado (via cookie ou Bearer token)
-    - **Resposta:** Confirmação de logout
+    ...
     """
     logger.info(f"Logout realizado para o usuário: {current_user.email}")
     
@@ -224,4 +237,4 @@ def logout(response: Response, current_user: models.Usuario = Depends(auth_servi
         db.add(log)
         db.commit()
     
-    return {"message": "Logout realizado com sucesso"} 
+    return {"message": "Logout realizado com sucesso"}

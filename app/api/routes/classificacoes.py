@@ -1,8 +1,9 @@
 """
 Rotas para classificação de imagens em ambientes.
 """
-from fastapi import APIRouter, Depends, HTTPException, status, Path, Body
+from fastapi import APIRouter, Depends, HTTPException, status, Path, Body, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import desc
 from app.db.database import get_db
 from app.services.auth_service import get_current_user
 from app.schemas.classificacao_schema import (
@@ -16,7 +17,9 @@ from app.schemas.classificacao_schema import (
 )
 from app.crud import classificacao_crud
 from app.db import models
-from typing import List
+from typing import List, Optional
+from pydantic import BaseModel
+from datetime import datetime
 import logging
 import uuid
 from urllib.parse import quote
@@ -25,6 +28,18 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/classificacoes", tags=["Classificações"])
 
+class HistoricoItemOut(BaseModel):
+    content_hash: str
+    nome_img: str
+    url_img: str
+    opcao_escolhida: str
+    data_classificacao: datetime
+    nome_ambiente: str
+    id_amb: str
+
+class HistoricoResponse(BaseModel):
+    total: int
+    items: List[HistoricoItemOut]
 
 def _montar_resposta_imagens(
     db: Session,
@@ -181,7 +196,35 @@ def inicializar_classificacao(
             detail=f"Erro ao inicializar classificação: {str(e)}"
         )
 
+@router.get("/contagem", response_model=dict)
+def obter_contagem_classificacoes(
+    usuario: models.Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Retorna o total de IMAGENS ÚNICAS classificadas pelo usuário.
+    Não importa se ele marcou 1 ou 10 opções na mesma imagem, conta como 1.
+    """
+    try:
+        if not usuario.convencional:
+            return {"total": 0}
 
+        id_con = usuario.convencional.id_con
+        
+        # A MÁGICA ESTÁ AQUI:
+        # 1. Selecionamos apenas a coluna do ID da Imagem (.id_img)
+        # 2. Usamos .distinct() para remover duplicatas (se a mesma imagem aparecer 3x, vira 1)
+        # 3. Contamos o resultado final
+        total = db.query(models.Classificacao.id_img)\
+            .filter(models.Classificacao.id_con == id_con)\
+            .distinct()\
+            .count()
+            
+        return {"total": total}
+        
+    except Exception as e:
+        logger.error(f"Erro ao obter contagem: {e}")
+        return {"total": 0}
 @router.post("/ambiente/{id_amb}/avancar", response_model=ImagensClassificacaoResponse)
 def avancar_imagens(
     id_amb: str = Path(..., description="ID do ambiente"),
@@ -362,3 +405,85 @@ def classificar_imagem(
             detail=f"Erro ao classificar imagem: {str(e)}"
         )
 
+@router.get("/historico", response_model=HistoricoResponse)
+def listar_historico_usuario(
+    id_amb: Optional[str] = Query(None, description="Filtrar por ID do ambiente (opcional)"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=100),
+    usuario: models.Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Retorna o histórico de imagens já classificadas pelo usuário.
+    Conserta o erro 500 usando o ID do ambiente fornecido ou recuperando via Join seguro.
+    """
+    try:
+        if not usuario.convencional:
+            return {"total": 0, "items": []}
+
+        id_con = usuario.convencional.id_con
+
+        # 1. Monta a Query incluindo a tabela Ambiente
+        query = db.query(
+            models.Classificacao,
+            models.Imagem,
+            models.Opcao,
+            models.ConjuntoImagens,
+            models.Ambiente
+        )\
+        .join(models.Imagem, models.Classificacao.id_img == models.Imagem.content_hash)\
+        .join(models.Opcao, models.Classificacao.id_opc == models.Opcao.id_opc)\
+        .join(models.ConjuntoImagens, models.Imagem.id_cnj == models.ConjuntoImagens.id_cnj)\
+        .join(models.Ambiente)\
+        .filter(models.Classificacao.id_con == id_con)
+
+        # 2. Filtro por ambiente
+        if id_amb:
+            # Filtra usando o ID do ambiente da tabela Ambiente
+            query = query.filter(models.Ambiente.id_amb == id_amb)
+
+        # 3. Ordenação
+        query = query.order_by(desc(models.Classificacao.data_criado))
+
+        resultados = query.offset((page - 1) * page_size).limit(page_size).all()
+
+        # 4. AGRUPAMENTO
+        grouped_items = {}
+
+        for classificacao, imagem, opcao, conjunto, ambiente in resultados:
+            
+            # DEFINE O ID DO AMBIENTE DE FORMA SEGURA
+            final_id_amb = id_amb if id_amb else str(ambiente.id_amb)
+
+            if imagem.content_hash in grouped_items:
+                item_existente = grouped_items[imagem.content_hash]
+                if opcao.texto not in item_existente["opcoes_lista"]:
+                    item_existente["opcoes_lista"].append(opcao.texto)
+            else:
+                path_limpo = imagem.caminho_img.lstrip('/')
+                url_img = f"/nextcloud/images/{quote(path_limpo, safe='/')}"
+
+                grouped_items[imagem.content_hash] = {
+                    "content_hash": imagem.content_hash,
+                    "nome_img": imagem.nome_img,
+                    "url_img": url_img,
+                    "opcoes_lista": [opcao.texto],
+                    "data_classificacao": classificacao.data_criado,
+                    "nome_ambiente": ambiente.titulo_amb,
+                    "id_amb": final_id_amb
+                }
+
+        # 5. Formata a resposta final
+        items_out = []
+        for item in grouped_items.values():
+            item["opcao_escolhida"] = ", ".join(item["opcoes_lista"])
+            del item["opcoes_lista"] 
+            items_out.append(item)
+
+        total = query.count()
+
+        return {"total": total, "items": items_out}
+
+    except Exception as e:
+        logger.error(f"Erro ao listar histórico: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro interno: {str(e)}")

@@ -18,6 +18,7 @@ class Usuario(Base):
     id_usu = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     nome_completo = Column(String(255), nullable=False)
     email = Column(String(255), nullable=False, unique=True, index=True)
+    telefone = Column(String(20), nullable=True)
     senha_hash = Column(CHAR(60), nullable=False)
     data_criado = Column(DateTime(timezone=True), nullable=False)
     data_ultimo_login = Column(DateTime(timezone=True))
