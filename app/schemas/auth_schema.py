@@ -205,8 +205,8 @@ class AmbienteInfoOut(BaseModel):
     titulo_amb: str
     descricao_questionario: str
     ativo: bool
-    total_imagens: int = 0
-    total_classificadas: int = 0
+    total_imagens: int = Field(default=0, description="Total de imagens no ambiente")
+    total_classificadas: int = Field(default=0, description="Total de imagens classificadas pelo usuário")
 
     class Config:
         from_attributes = True
@@ -232,8 +232,10 @@ class UsuarioAmbientesOut(BaseModel):
                     {
                         "id_amb": "a1b2c3d4-5678-1234-9abc-1234567890ab",
                         "titulo_amb": "Ambiente de Teste",
-                        "descricao": "Ambiente para testes",
-                        "ativo": True
+                        "descricao_questionario": "Descrição do questionário do ambiente",
+                        "ativo": True,
+                        "total_imagens": 150,
+                        "total_classificadas": 45
                     }
                 ]
             }
