@@ -19,14 +19,14 @@ class ClassificacaoInfoOut(BaseModel):
 
 
 class ImagemClassificacaoOut(BaseModel):
-    """Informações de uma imagem com sua classificação (se existir)."""
+    """Informações de uma imagem com suas classificações (se existirem)."""
     content_hash: str
     nome_img: str
     caminho_img: str
     data_proc: datetime
     data_sinc: datetime
     download_url: str  # URL para baixar via proxy NextCloud
-    classificacao: Optional[ClassificacaoInfoOut] = None  # None se não foi classificada
+    classificacoes: List[ClassificacaoInfoOut] = []  # Lista de classificações (permite múltiplas opções)
 
     class Config:
         from_attributes = True
@@ -53,15 +53,15 @@ class VoltarRequest(BaseModel):
 
 
 class ClassificarRequest(BaseModel):
-    """Request para classificar uma imagem."""
+    """Request para classificar uma imagem com uma ou múltiplas opções."""
     content_hash: str = Field(..., description="Hash da imagem a ser classificada")
-    id_opc: str = Field(..., description="ID da opção escolhida")
+    id_opc: List[str] = Field(..., min_length=1, description="Lista de IDs das opções escolhidas (permite múltiplas opções)")
 
     class Config:
         json_schema_extra = {
             "example": {
                 "content_hash": "abc123...",
-                "id_opc": "opcao-uuid-123"
+                "id_opc": ["opcao-uuid-123", "opcao-uuid-456"]
             }
         }
 
@@ -69,8 +69,18 @@ class ClassificarRequest(BaseModel):
 class ClassificarResponse(BaseModel):
     """Resposta após classificar uma imagem."""
     message: str
-    classificacao: ClassificacaoInfoOut
+    classificacoes: List[ClassificacaoInfoOut]  # Lista de classificações criadas/atualizadas
     total_classificadas: int
+
+    class Config:
+        from_attributes = True
+
+
+class ClassificacoesImagemResponse(BaseModel):
+    """Resposta com classificações de uma imagem específica para o usuário autenticado."""
+    content_hash: str
+    nome_img: str
+    classificacoes: List[ClassificacaoInfoOut]  # Lista de classificações ativas do usuário
 
     class Config:
         from_attributes = True

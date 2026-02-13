@@ -13,7 +13,8 @@ from app.schemas.classificacao_schema import (
     AvancarRequest,
     VoltarRequest,
     ClassificarRequest,
-    ClassificarResponse
+    ClassificarResponse,
+    ClassificacoesImagemResponse
 )
 from app.crud import classificacao_crud
 from app.db import models
@@ -48,7 +49,7 @@ def _montar_resposta_imagens(
     tem_mais: bool
 ) -> ImagensClassificacaoResponse:
     """
-    Monta resposta com imagens e suas classificações.
+    Monta resposta com imagens e suas classificações (suporta múltiplas opções por imagem).
     """
     if not imagens:
         return ImagensClassificacaoResponse(
@@ -57,7 +58,7 @@ def _montar_resposta_imagens(
             tem_mais=False
         )
     
-    # Buscar classificações do usuário para essas imagens
+    # Buscar classificações do usuário para essas imagens (retorna dict com lista de classificações)
     classificacoes_dict = classificacao_crud.obter_classificacoes_imagens(
         db, id_con, imagens
     )
@@ -65,7 +66,7 @@ def _montar_resposta_imagens(
     # Montar lista de imagens com classificações
     imagens_out = []
     for img in imagens:
-        classificacao = classificacoes_dict.get(img.content_hash)
+        classificacoes_lista = classificacoes_dict.get(img.content_hash, [])
         
         # Montar URL de download via proxy NextCloud
         # O caminho_img já está no formato relativo (ex: "pasta/arquivo.jpg")
@@ -73,18 +74,21 @@ def _montar_resposta_imagens(
         path_limpo = img.caminho_img.lstrip('/')
         download_url = f"/nextcloud/images/{quote(path_limpo, safe='/')}"
         
-        classificacao_out = None
-        if classificacao:
+        # Converter classificações para o formato de saída
+        classificacoes_out = []
+        for classificacao in classificacoes_lista:
             # Buscar texto da opção
             opcao = db.query(models.Opcao).filter_by(id_opc=classificacao.id_opc).first()
             texto_opcao = opcao.texto if opcao else "Opção não encontrada"
             
-            classificacao_out = ClassificacaoInfoOut(
-                id_cla=str(classificacao.id_cla),
-                id_opc=str(classificacao.id_opc),
-                texto_opcao=texto_opcao,
-                data_criado=classificacao.data_criado,
-                data_modificado=classificacao.data_modificado
+            classificacoes_out.append(
+                ClassificacaoInfoOut(
+                    id_cla=str(classificacao.id_cla),
+                    id_opc=str(classificacao.id_opc),
+                    texto_opcao=texto_opcao,
+                    data_criado=classificacao.data_criado,
+                    data_modificado=classificacao.data_modificado
+                )
             )
         
         imagens_out.append(
@@ -95,7 +99,7 @@ def _montar_resposta_imagens(
                 data_proc=img.data_proc,
                 data_sinc=img.data_sinc,
                 download_url=download_url,
-                classificacao=classificacao_out
+                classificacoes=classificacoes_out
             )
         )
     
@@ -202,7 +206,7 @@ def obter_contagem_classificacoes(
     db: Session = Depends(get_db)
 ):
     """
-    Retorna o total de IMAGENS ÚNICAS classificadas pelo usuário.
+    Retorna o total de IMAGENS ÚNICAS classificadas pelo usuário (apenas classificações ativas).
     Não importa se ele marcou 1 ou 10 opções na mesma imagem, conta como 1.
     """
     try:
@@ -211,12 +215,16 @@ def obter_contagem_classificacoes(
 
         id_con = usuario.convencional.id_con
         
-        # A MÁGICA ESTÁ AQUI:
+        # Contar apenas imagens com classificações ativas
         # 1. Selecionamos apenas a coluna do ID da Imagem (.id_img)
-        # 2. Usamos .distinct() para remover duplicatas (se a mesma imagem aparecer 3x, vira 1)
-        # 3. Contamos o resultado final
+        # 2. Filtramos apenas classificações ativas
+        # 3. Usamos .distinct() para remover duplicatas (se a mesma imagem aparecer 3x, vira 1)
+        # 4. Contamos o resultado final
         total = db.query(models.Classificacao.id_img)\
-            .filter(models.Classificacao.id_con == id_con)\
+            .filter(
+                models.Classificacao.id_con == id_con,
+                models.Classificacao.ativo == True
+            )\
             .distinct()\
             .count()
             
@@ -335,15 +343,15 @@ def classificar_imagem(
     db: Session = Depends(get_db)
 ):
     """
-    Classifica uma imagem.
+    Classifica uma imagem com uma ou múltiplas opções.
     
-    Cria uma nova classificação ou atualiza uma classificação existente.
-    Atualiza o progresso do usuário automaticamente.
+    Implementa lógica de reclassificação: inativa classificações antigas que não estão na nova lista
+    e cria apenas as novas opções. Mantém opções que já existiam e estão na nova lista.
     
     - **Acesso:** Usuários autenticados (convencionais)
     - **Autenticação:** JWT (via cookie HttpOnly ou Bearer token)
-    - **Body:** Hash da imagem e ID da opção escolhida
-    - **Resposta:** Confirmação com informações da classificação
+    - **Body:** Hash da imagem e lista de IDs das opções escolhidas
+    - **Resposta:** Confirmação com informações das classificações criadas/atualizadas
     """
     try:
         id_con = _obter_id_con_usuario(db, usuario)
@@ -365,34 +373,42 @@ def classificar_imagem(
                     detail="A imagem não pertence a este ambiente."
                 )
         
-        # Criar ou atualizar classificação
-        classificacao, foi_criada = classificacao_crud.criar_ou_atualizar_classificacao(
+        # Criar ou atualizar classificações (aceita múltiplas opções)
+        classificacoes, total_novas = classificacao_crud.criar_ou_atualizar_classificacao(
             db, id_con, id_amb, request.content_hash, request.id_opc
         )
         
-        if not classificacao:
+        if not classificacoes:
             raise HTTPException(
                 status_code=400,
-                detail="Não foi possível criar/atualizar a classificação. Verifique se a imagem e a opção são válidas."
+                detail="Não foi possível criar/atualizar a classificação. Verifique se a imagem e as opções são válidas."
             )
         
-        # Buscar texto da opção
-        opcao = db.query(models.Opcao).filter_by(id_opc=classificacao.id_opc).first()
-        texto_opcao = opcao.texto if opcao else "Opção não encontrada"
+        # Buscar textos das opções e montar resposta
+        classificacoes_out = []
+        for classificacao in classificacoes:
+            opcao = db.query(models.Opcao).filter_by(id_opc=classificacao.id_opc).first()
+            texto_opcao = opcao.texto if opcao else "Opção não encontrada"
+            
+            classificacoes_out.append(
+                ClassificacaoInfoOut(
+                    id_cla=str(classificacao.id_cla),
+                    id_opc=str(classificacao.id_opc),
+                    texto_opcao=texto_opcao,
+                    data_criado=classificacao.data_criado,
+                    data_modificado=classificacao.data_modificado
+                )
+            )
         
         # Buscar total de classificadas
         progresso = classificacao_crud.obter_progresso_usuario(db, id_con, id_amb)
         total_classificadas = progresso.total_classificadas if progresso else 0
         
+        mensagem = f"Classificação salva com sucesso. {total_novas} nova(s) opção(ões) adicionada(s)." if total_novas > 0 else "Classificação atualizada com sucesso."
+        
         return ClassificarResponse(
-            message="Classificação salva com sucesso." if foi_criada else "Classificação atualizada com sucesso.",
-            classificacao=ClassificacaoInfoOut(
-                id_cla=str(classificacao.id_cla),
-                id_opc=str(classificacao.id_opc),
-                texto_opcao=texto_opcao,
-                data_criado=classificacao.data_criado,
-                data_modificado=classificacao.data_modificado
-            ),
+            message=mensagem,
+            classificacoes=classificacoes_out,
             total_classificadas=total_classificadas
         )
     
@@ -404,6 +420,79 @@ def classificar_imagem(
             status_code=500,
             detail=f"Erro ao classificar imagem: {str(e)}"
         )
+
+@router.get("/imagem/{content_hash}", response_model=ClassificacoesImagemResponse)
+def obter_classificacoes_imagem(
+    content_hash: str = Path(..., description="Hash (content_hash) da imagem"),
+    usuario: models.Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Retorna as classificações ativas de uma imagem específica para o usuário autenticado.
+    
+    - **Acesso:** Usuários autenticados (convencionais)
+    - **Autenticação:** JWT (via cookie HttpOnly ou Bearer token)
+    - **Parâmetros:** content_hash da imagem (path parameter)
+    - **Resposta:** Lista de classificações ativas do usuário para aquela imagem
+    """
+    try:
+        id_con_str = _obter_id_con_usuario(db, usuario)
+        
+        # Converter id_con para UUID
+        try:
+            id_con_uuid = uuid.UUID(id_con_str) if isinstance(id_con_str, str) else id_con_str
+        except (ValueError, TypeError):
+            raise HTTPException(
+                status_code=400,
+                detail="ID do usuário inválido."
+            )
+        
+        # Verificar se a imagem existe
+        imagem = db.query(models.Imagem).filter_by(content_hash=content_hash).first()
+        if not imagem:
+            raise HTTPException(
+                status_code=404,
+                detail="Imagem não encontrada."
+            )
+        
+        # Buscar classificações ativas do usuário para esta imagem
+        classificacoes = db.query(models.Classificacao).filter(
+            models.Classificacao.id_con == id_con_uuid,
+            models.Classificacao.id_img == content_hash,
+            models.Classificacao.ativo == True
+        ).all()
+        
+        # Converter classificações para o formato de saída
+        classificacoes_out = []
+        for classificacao in classificacoes:
+            opcao = db.query(models.Opcao).filter_by(id_opc=classificacao.id_opc).first()
+            texto_opcao = opcao.texto if opcao else "Opção não encontrada"
+            
+            classificacoes_out.append(
+                ClassificacaoInfoOut(
+                    id_cla=str(classificacao.id_cla),
+                    id_opc=str(classificacao.id_opc),
+                    texto_opcao=texto_opcao,
+                    data_criado=classificacao.data_criado,
+                    data_modificado=classificacao.data_modificado
+                )
+            )
+        
+        return ClassificacoesImagemResponse(
+            content_hash=imagem.content_hash,
+            nome_img=imagem.nome_img,
+            classificacoes=classificacoes_out
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erro ao obter classificações da imagem: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro ao obter classificações da imagem: {str(e)}"
+        )
+
 
 @router.get("/historico", response_model=HistoricoResponse)
 def listar_historico_usuario(
@@ -423,7 +512,7 @@ def listar_historico_usuario(
 
         id_con = usuario.convencional.id_con
 
-        # 1. Monta a Query incluindo a tabela Ambiente
+        # 1. Monta a Query incluindo a tabela Ambiente (apenas classificações ativas)
         query = db.query(
             models.Classificacao,
             models.Imagem,
@@ -435,7 +524,10 @@ def listar_historico_usuario(
         .join(models.Opcao, models.Classificacao.id_opc == models.Opcao.id_opc)\
         .join(models.ConjuntoImagens, models.Imagem.id_cnj == models.ConjuntoImagens.id_cnj)\
         .join(models.Ambiente)\
-        .filter(models.Classificacao.id_con == id_con)
+        .filter(
+            models.Classificacao.id_con == id_con,
+            models.Classificacao.ativo == True
+        )
 
         # 2. Filtro por ambiente
         if id_amb:

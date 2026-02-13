@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, Boolean, DateTime, Text, ForeignKey, UniqueConstraint, JSON, CHAR, event
+from sqlalchemy import Column, String, Integer, Boolean, DateTime, Text, ForeignKey, UniqueConstraint, JSON, CHAR, event, Index
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from app.db.database import Base
@@ -219,12 +219,19 @@ class Imagem(Base):
 
 class Classificacao(Base):
     __tablename__ = 'classificacoes'
+    __table_args__ = (
+        # Índice composto para busca eficiente de classificações ativas por usuário e imagem
+        Index('idx_classificacao_usuario_imagem_ativo', 'id_con', 'id_img', 'ativo'),
+        # Índice composto para busca por usuário, imagem e opção (evita duplicatas)
+        Index('idx_classificacao_usuario_imagem_opcao', 'id_con', 'id_img', 'id_opc'),
+    )
     id_cla = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     data_criado = Column(DateTime(timezone=True), nullable=False)
     data_modificado = Column(DateTime(timezone=True))
     id_con = Column(UUID(as_uuid=True), ForeignKey('usuarios_convencionais.id_con', ondelete='CASCADE'), nullable=False, index=True)
     id_img = Column(String(64), ForeignKey('imagens.content_hash', ondelete='CASCADE'), nullable=False, index=True)  # FK mudou de UUID para String (content_hash)
     id_opc = Column(UUID(as_uuid=True), ForeignKey('opcoes.id_opc', ondelete='RESTRICT'), nullable=False, index=True)
+    ativo = Column(Boolean, nullable=False, default=True)  # Exclusão lógica - permite reclassificação sem perder histórico
     usuario_convencional = relationship('UsuarioConvencional', back_populates='classificacoes')
     imagem = relationship('Imagem', back_populates='classificacoes')
     opcao = relationship('Opcao', back_populates='classificacoes')

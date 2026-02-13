@@ -109,10 +109,11 @@ def buscar_imagens_inicial(
     if not conjuntos_ids:
         return [], False
     
-    # Buscar imagens já classificadas pelo usuário
-    classificadas_subquery = db.query(models.Classificacao.id_img).filter_by(
-        id_con=id_con_uuid
-    )
+    # Buscar imagens já classificadas pelo usuário (apenas classificações ativas)
+    classificadas_subquery = db.query(models.Classificacao.id_img).filter(
+        models.Classificacao.id_con == id_con_uuid,
+        models.Classificacao.ativo == True
+    ).distinct()
     classificadas_hashes = [row[0] for row in classificadas_subquery.all()]
     
     # Query base
@@ -286,7 +287,7 @@ def obter_classificacoes_imagens(
     imagens: List[models.Imagem]
 ) -> dict:
     """
-    Busca classificações do usuário para uma lista de imagens.
+    Busca classificações ativas do usuário para uma lista de imagens.
     
     Args:
         db: Sessão do banco de dados
@@ -294,7 +295,7 @@ def obter_classificacoes_imagens(
         imagens: Lista de imagens
     
     Returns:
-        Dicionário {content_hash: Classificacao}
+        Dicionário {content_hash: List[Classificacao]} - Lista de classificações por imagem
     """
     try:
         id_con_uuid = uuid.UUID(id_con) if isinstance(id_con, str) else id_con
@@ -306,12 +307,21 @@ def obter_classificacoes_imagens(
     
     content_hashes = [img.content_hash for img in imagens]
     
+    # Buscar apenas classificações ativas
     classificacoes = db.query(models.Classificacao).filter(
         models.Classificacao.id_con == id_con_uuid,
-        models.Classificacao.id_img.in_(content_hashes)
+        models.Classificacao.id_img.in_(content_hashes),
+        models.Classificacao.ativo == True
     ).all()
     
-    return {c.id_img: c for c in classificacoes}
+    # Agrupar por content_hash (múltiplas classificações por imagem)
+    resultado = {}
+    for c in classificacoes:
+        if c.id_img not in resultado:
+            resultado[c.id_img] = []
+        resultado[c.id_img].append(c)
+    
+    return resultado
 
 
 def criar_ou_atualizar_classificacao(
@@ -319,84 +329,182 @@ def criar_ou_atualizar_classificacao(
     id_con: str,
     id_amb: str,
     content_hash: str,
-    id_opc: str
-) -> Tuple[Optional[models.Classificacao], bool]:
+    id_opc: List[str]
+) -> Tuple[List[models.Classificacao], int]:
     """
-    Cria ou atualiza uma classificação.
+    Cria ou atualiza classificações para uma imagem com múltiplas opções.
+    Implementa lógica de reclassificação: inativa classificações antigas que não estão na nova lista.
     
     Args:
         db: Sessão do banco de dados
         id_con: ID do usuário convencional
         id_amb: ID do ambiente
         content_hash: Hash da imagem
-        id_opc: ID da opção escolhida
+        id_opc: Lista de IDs das opções escolhidas
     
     Returns:
-        Tupla (classificacao, foi_criada)
+        Tupla (lista_classificacoes_criadas_atualizadas, total_novas_criadas)
     """
     try:
         id_con_uuid = uuid.UUID(id_con) if isinstance(id_con, str) else id_con
-        id_opc_uuid = uuid.UUID(id_opc) if isinstance(id_opc, str) else id_opc
-    except (ValueError, TypeError):
-        return None, False
+        id_amb_uuid = uuid.UUID(id_amb) if isinstance(id_amb, str) else id_amb
+        
+        # Converter lista de opções para UUIDs
+        id_opc_uuids = []
+        for opc_id in id_opc:
+            try:
+                id_opc_uuids.append(uuid.UUID(opc_id) if isinstance(opc_id, str) else opc_id)
+            except (ValueError, TypeError):
+                logger.warning(f"ID de opção inválido: {opc_id}")
+                continue
+        
+        if not id_opc_uuids:
+            return [], 0
+            
+    except (ValueError, TypeError) as e:
+        logger.error(f"Erro ao converter IDs: {e}")
+        return [], 0
     
     # Verificar se imagem existe
     imagem = db.query(models.Imagem).filter_by(content_hash=content_hash).first()
     if not imagem:
-        return None, False
+        logger.warning(f"Imagem não encontrada: {content_hash}")
+        return [], 0
     
     # Verificar se a imagem pertence ao ambiente
     conjuntos_ids = buscar_conjuntos_ambiente(db, id_amb)
     if imagem.id_cnj not in conjuntos_ids:
-        return None, False
+        logger.warning(f"Imagem não pertence ao ambiente: {content_hash}")
+        return [], 0
     
-    # Verificar se opção existe e pertence ao ambiente
+    # Verificar se todas as opções existem e pertencem ao ambiente
+    opcoes_validas = {}
+    for id_opc_uuid in id_opc_uuids:
+        opcao = db.query(models.Opcao).filter_by(id_opc=id_opc_uuid, id_amb=id_amb_uuid).first()
+        if not opcao:
+            logger.warning(f"Opção não encontrada ou não pertence ao ambiente: {id_opc_uuid}")
+            continue
+        opcoes_validas[id_opc_uuid] = opcao
+    
+    if not opcoes_validas:
+        logger.warning("Nenhuma opção válida fornecida")
+        return [], 0
+    
+    # Buscar TODAS as classificações existentes (ativas E inativas) para esta imagem e usuário
+    # Isso permite reativar classificações que estavam inativas
+    classificacoes_existentes = db.query(models.Classificacao).filter(
+        models.Classificacao.id_con == id_con_uuid,
+        models.Classificacao.id_img == content_hash
+        # Não filtrar por ativo - buscar todas para poder reativar
+    ).all()
+    
+    # Criar dicionário de classificações existentes por opção
+    classificacoes_por_opcao = {c.id_opc: c for c in classificacoes_existentes}
+    
+    # Separar classificações ativas e inativas
+    classificacoes_ativas = {c.id_opc: c for c in classificacoes_existentes if c.ativo}
+    classificacoes_inativas = {c.id_opc: c for c in classificacoes_existentes if not c.ativo}
+    
+    # Identificar quais opções já existem e quais são novas
+    opcoes_para_manter = set(opcoes_validas.keys())
+    opcoes_existentes_ativas = set(classificacoes_ativas.keys())
+    opcoes_existentes_inativas = set(classificacoes_inativas.keys())
+    opcoes_existentes_todas = opcoes_existentes_ativas | opcoes_existentes_inativas
+    
+    # Opções que devem ser inativadas (existem ativas mas não estão na nova lista)
+    opcoes_para_inativar = opcoes_existentes_ativas - opcoes_para_manter
+    
+    # Opções novas que precisam ser criadas (não existem em nenhuma forma)
+    opcoes_para_criar = opcoes_para_manter - opcoes_existentes_todas
+    
+    # Opções que já existem ativas e devem ser mantidas
+    opcoes_para_manter_ativas = opcoes_para_manter & opcoes_existentes_ativas
+    
+    # Opções que existem inativas e devem ser reativadas
+    opcoes_para_reativar = opcoes_para_manter & opcoes_existentes_inativas
+    
+    agora = datetime.now(timezone.utc)
+    classificacoes_resultado = []
+    total_novas = 0
+    
     try:
-        id_amb_uuid = uuid.UUID(id_amb) if isinstance(id_amb, str) else id_amb
-    except (ValueError, TypeError):
-        return None, False
-    
-    opcao = db.query(models.Opcao).filter_by(id_opc=id_opc_uuid, id_amb=id_amb_uuid).first()
-    if not opcao:
-        return None, False
-    
-    # Buscar classificação existente
-    classificacao = db.query(models.Classificacao).filter_by(
-        id_con=id_con_uuid,
-        id_img=content_hash
-    ).first()
-    
-    foi_criada = False
-    if classificacao:
-        # Atualizar existente
-        classificacao.id_opc = id_opc_uuid
-        classificacao.data_modificado = datetime.now(timezone.utc)
-    else:
-        # Criar nova
-        classificacao = models.Classificacao(
-            id_con=id_con_uuid,
-            id_img=content_hash,
-            id_opc=id_opc_uuid,
-            data_criado=datetime.now(timezone.utc)
-        )
-        db.add(classificacao)
-        foi_criada = True
-    
-    # Atualizar progresso
-    progresso = obter_progresso_usuario(db, id_con, id_amb)
-    if progresso:
-        progresso.ultimo_data_proc_processado = imagem.data_proc
-        progresso.ultimo_content_hash_processado = imagem.content_hash
-        progresso.data_ultima_atividade = datetime.now(timezone.utc)
-        if foi_criada:
-            progresso.total_classificadas += 1
-    
-    try:
+        # 1. Inativar classificações que não estão mais na lista
+        if opcoes_para_inativar:
+            db.query(models.Classificacao).filter(
+                models.Classificacao.id_con == id_con_uuid,
+                models.Classificacao.id_img == content_hash,
+                models.Classificacao.id_opc.in_(opcoes_para_inativar),
+                models.Classificacao.ativo == True
+            ).update(
+                {'ativo': False, 'data_modificado': agora},
+                synchronize_session=False
+            )
+            logger.info(f"Inativadas {len(opcoes_para_inativar)} classificações para imagem {content_hash}")
+        
+        # 2. Reativar classificações que estavam inativas mas estão na nova lista
+        if opcoes_para_reativar:
+            for id_opc_uuid in opcoes_para_reativar:
+                classificacao = classificacoes_inativas[id_opc_uuid]
+                # Reativar classificação que estava inativa
+                classificacao.ativo = True
+                classificacao.data_modificado = agora
+                classificacoes_resultado.append(classificacao)
+            logger.info(f"Reativadas {len(opcoes_para_reativar)} classificações para imagem {content_hash}")
+        
+        # 3. Adicionar classificações que já estavam ativas e devem ser mantidas
+        if opcoes_para_manter_ativas:
+            for id_opc_uuid in opcoes_para_manter_ativas:
+                classificacao = classificacoes_ativas[id_opc_uuid]
+                # Já está ativa, apenas adicionar ao resultado
+                classificacoes_resultado.append(classificacao)
+        
+        # 4. Criar novas classificações para opções que não existiam
+        novas_classificacoes = []
+        for id_opc_uuid in opcoes_para_criar:
+            nova_classificacao = models.Classificacao(
+                id_con=id_con_uuid,
+                id_img=content_hash,
+                id_opc=id_opc_uuid,
+                data_criado=agora,
+                ativo=True
+            )
+            novas_classificacoes.append(nova_classificacao)
+            classificacoes_resultado.append(nova_classificacao)
+            total_novas += 1
+        
+        if novas_classificacoes:
+            db.bulk_save_objects(novas_classificacoes)
+            logger.info(f"Criadas {len(novas_classificacoes)} novas classificações para imagem {content_hash}")
+        
+        # 5. Atualizar progresso do usuário
+        progresso = obter_progresso_usuario(db, id_con, id_amb)
+        if progresso:
+            progresso.ultimo_data_proc_processado = imagem.data_proc
+            progresso.ultimo_content_hash_processado = imagem.content_hash
+            progresso.data_ultima_atividade = agora
+            
+            # Atualizar contagem de imagens classificadas
+            # Incrementa apenas se:
+            # 1. Houver novas classificações criadas OU
+            # 2. Houver reativações E a imagem não tinha nenhuma classificação ativa antes
+            tinha_classificacao_ativa_antes = len(opcoes_existentes_ativas) > 0
+            
+            if total_novas > 0 or (opcoes_para_reativar and not tinha_classificacao_ativa_antes):
+                # Primeira vez classificando esta imagem (ou primeira vez após todas terem sido inativadas)
+                if not tinha_classificacao_ativa_antes:
+                    progresso.total_classificadas += 1
+        
         db.commit()
-        db.refresh(classificacao)
-        return classificacao, foi_criada
+        
+        # Refresh das novas classificações
+        for c in novas_classificacoes:
+            db.refresh(c)
+        
+        logger.info(f"Classificação concluída: {len(classificacoes_resultado)} classificações ativas, {total_novas} novas")
+        return classificacoes_resultado, total_novas
+        
     except Exception as e:
         db.rollback()
-        logger.error(f"Erro ao salvar classificação: {e}")
-        return None, False
+        logger.error(f"Erro ao salvar classificação: {e}", exc_info=True)
+        return [], 0
 
