@@ -75,7 +75,9 @@ def meus_ambientes(
             id_amb=amb["id_amb"],
             titulo_amb=amb["titulo_amb"],
             descricao_questionario=amb["descricao_questionario"],
-            ativo=amb["ativo"]
+            ativo=amb["ativo"],
+            total_imagens=amb.get("total_imagens", 0),
+            total_classificadas=amb.get("total_classificadas", 0)
         )
         for amb in ambientes
     ]
@@ -134,7 +136,9 @@ def listar_ambientes_usuario(
             id_amb=amb["id_amb"],
             titulo_amb=amb["titulo_amb"],
             descricao_questionario=amb["descricao_questionario"],
-            ativo=amb["ativo"]
+            ativo=amb["ativo"],
+            total_imagens=amb.get("total_imagens", 0),
+            total_classificadas=amb.get("total_classificadas", 0)
         )
         for amb in ambientes
     ]
