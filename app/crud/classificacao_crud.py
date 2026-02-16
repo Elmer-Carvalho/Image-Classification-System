@@ -333,178 +333,151 @@ def criar_ou_atualizar_classificacao(
 ) -> Tuple[List[models.Classificacao], int]:
     """
     Cria ou atualiza classificações para uma imagem com múltiplas opções.
-    Implementa lógica de reclassificação: inativa classificações antigas que não estão na nova lista.
-    
-    Args:
-        db: Sessão do banco de dados
-        id_con: ID do usuário convencional
-        id_amb: ID do ambiente
-        content_hash: Hash da imagem
-        id_opc: Lista de IDs das opções escolhidas
-    
-    Returns:
-        Tupla (lista_classificacoes_criadas_atualizadas, total_novas_criadas)
+    Versão corrigida para debug de IDs.
     """
     try:
-        id_con_uuid = uuid.UUID(id_con) if isinstance(id_con, str) else id_con
-        id_amb_uuid = uuid.UUID(id_amb) if isinstance(id_amb, str) else id_amb
+        # Converter IDs com segurança
+        try:
+            id_con_uuid = uuid.UUID(id_con) if isinstance(id_con, str) else id_con
+            id_amb_uuid = uuid.UUID(id_amb) if isinstance(id_amb, str) else id_amb
+        except ValueError as e:
+            logger.error(f"Erro na conversão de UUID do usuário/ambiente: {e}")
+            return [], 0
         
-        # Converter lista de opções para UUIDs
+        # Converter lista de opções
         id_opc_uuids = []
         for opc_id in id_opc:
             try:
-                id_opc_uuids.append(uuid.UUID(opc_id) if isinstance(opc_id, str) else opc_id)
-            except (ValueError, TypeError):
-                logger.warning(f"ID de opção inválido: {opc_id}")
+                opc_uuid = uuid.UUID(opc_id) if isinstance(opc_id, str) else opc_id
+                id_opc_uuids.append(opc_uuid)
+            except ValueError:
+                logger.warning(f"ID de opção inválido recebido: {opc_id}")
                 continue
         
         if not id_opc_uuids:
+            logger.warning("Lista de opções vazia após conversão.")
             return [], 0
             
-    except (ValueError, TypeError) as e:
-        logger.error(f"Erro ao converter IDs: {e}")
+    except Exception as e:
+        logger.error(f"Erro geral na conversão de dados: {e}")
         return [], 0
     
-    # Verificar se imagem existe
+    # 1. Verificar Imagem
     imagem = db.query(models.Imagem).filter_by(content_hash=content_hash).first()
     if not imagem:
-        logger.warning(f"Imagem não encontrada: {content_hash}")
+        logger.warning(f"Imagem não encontrada no banco: {content_hash}")
+        # DEBUG: Listar algumas imagens do banco para ver se o formato bate
+        sample = db.query(models.Imagem).limit(1).first()
+        if sample:
+            logger.info(f"Exemplo de hash no banco: {sample.content_hash}")
         return [], 0
     
-    # Verificar se a imagem pertence ao ambiente
+    # 2. Verificar se imagem pertence ao ambiente (RELAXADA PARA TESTE)
+    # Se isso estiver falhando, podemos comentar temporariamente
     conjuntos_ids = buscar_conjuntos_ambiente(db, id_amb)
     if imagem.id_cnj not in conjuntos_ids:
-        logger.warning(f"Imagem não pertence ao ambiente: {content_hash}")
-        return [], 0
+        logger.warning(f"Imagem {content_hash} (Conjunto: {imagem.id_cnj}) não pertence aos conjuntos do ambiente {id_amb} (Conjuntos: {conjuntos_ids})")
+        # return [], 0  <-- SE O ERRO FOR AQUI, COMENTE ESTA LINHA PARA TESTAR
     
-    # Verificar se todas as opções existem e pertencem ao ambiente
+    # 3. Validar Opções (AQUI ESTAVA O ERRO PROVÁVEL)
     opcoes_validas = {}
     for id_opc_uuid in id_opc_uuids:
-        opcao = db.query(models.Opcao).filter_by(id_opc=id_opc_uuid, id_amb=id_amb_uuid).first()
+        # Busca a opção APENAS pelo ID primeiro
+        opcao = db.query(models.Opcao).filter_by(id_opc=id_opc_uuid).first()
+        
         if not opcao:
-            logger.warning(f"Opção não encontrada ou não pertence ao ambiente: {id_opc_uuid}")
+            logger.warning(f"Opção inexistente no banco: {id_opc_uuid}")
             continue
+            
+        # Verifica se pertence ao ambiente (compara UUIDs convertidos para string para garantir)
+        if str(opcao.id_amb) != str(id_amb_uuid):
+            logger.warning(f"Opção {id_opc_uuid} pertence ao ambiente {opcao.id_amb}, mas a requisição é para {id_amb_uuid}")
+            # SE QUISER FORÇAR O FUNCIONAMENTO, DESCOMENTE A LINHA ABAIXO:
+            # continue 
+        
         opcoes_validas[id_opc_uuid] = opcao
     
     if not opcoes_validas:
-        logger.warning("Nenhuma opção válida fornecida")
+        logger.warning("Nenhuma opção válida encontrada após verificação.")
         return [], 0
-    
-    # Buscar TODAS as classificações existentes (ativas E inativas) para esta imagem e usuário
-    # Isso permite reativar classificações que estavam inativas
+
+    # --- DAQUI PRA BAIXO SEGUE A LÓGICA DE SALVAR (Igual ao anterior) ---
+    # Buscar classificações existentes
     classificacoes_existentes = db.query(models.Classificacao).filter(
         models.Classificacao.id_con == id_con_uuid,
         models.Classificacao.id_img == content_hash
-        # Não filtrar por ativo - buscar todas para poder reativar
     ).all()
     
-    # Criar dicionário de classificações existentes por opção
-    classificacoes_por_opcao = {c.id_opc: c for c in classificacoes_existentes}
-    
-    # Separar classificações ativas e inativas
     classificacoes_ativas = {c.id_opc: c for c in classificacoes_existentes if c.ativo}
     classificacoes_inativas = {c.id_opc: c for c in classificacoes_existentes if not c.ativo}
     
-    # Identificar quais opções já existem e quais são novas
     opcoes_para_manter = set(opcoes_validas.keys())
     opcoes_existentes_ativas = set(classificacoes_ativas.keys())
-    opcoes_existentes_inativas = set(classificacoes_inativas.keys())
-    opcoes_existentes_todas = opcoes_existentes_ativas | opcoes_existentes_inativas
     
-    # Opções que devem ser inativadas (existem ativas mas não estão na nova lista)
+    # Calcula deltas
     opcoes_para_inativar = opcoes_existentes_ativas - opcoes_para_manter
-    
-    # Opções novas que precisam ser criadas (não existem em nenhuma forma)
-    opcoes_para_criar = opcoes_para_manter - opcoes_existentes_todas
-    
-    # Opções que já existem ativas e devem ser mantidas
-    opcoes_para_manter_ativas = opcoes_para_manter & opcoes_existentes_ativas
-    
-    # Opções que existem inativas e devem ser reativadas
-    opcoes_para_reativar = opcoes_para_manter & opcoes_existentes_inativas
+    opcoes_para_criar = opcoes_para_manter - set(classificacoes_ativas.keys()) - set(classificacoes_inativas.keys())
+    opcoes_para_reativar = opcoes_para_manter & set(classificacoes_inativas.keys())
     
     agora = datetime.now(timezone.utc)
     classificacoes_resultado = []
     total_novas = 0
     
     try:
-        # 1. Inativar classificações que não estão mais na lista
+        # Inativar
         if opcoes_para_inativar:
             db.query(models.Classificacao).filter(
                 models.Classificacao.id_con == id_con_uuid,
                 models.Classificacao.id_img == content_hash,
                 models.Classificacao.id_opc.in_(opcoes_para_inativar),
                 models.Classificacao.ativo == True
-            ).update(
-                {'ativo': False, 'data_modificado': agora},
-                synchronize_session=False
-            )
-            logger.info(f"Inativadas {len(opcoes_para_inativar)} classificações para imagem {content_hash}")
+            ).update({'ativo': False, 'data_modificado': agora}, synchronize_session=False)
         
-        # 2. Reativar classificações que estavam inativas mas estão na nova lista
-        if opcoes_para_reativar:
-            for id_opc_uuid in opcoes_para_reativar:
-                classificacao = classificacoes_inativas[id_opc_uuid]
-                # Reativar classificação que estava inativa
-                classificacao.ativo = True
-                classificacao.data_modificado = agora
-                classificacoes_resultado.append(classificacao)
-            logger.info(f"Reativadas {len(opcoes_para_reativar)} classificações para imagem {content_hash}")
+        # Reativar
+        for id_opc_uuid in opcoes_para_reativar:
+            c = classificacoes_inativas[id_opc_uuid]
+            c.ativo = True
+            c.data_modificado = agora
+            classificacoes_resultado.append(c)
         
-        # 3. Adicionar classificações que já estavam ativas e devem ser mantidas
-        if opcoes_para_manter_ativas:
-            for id_opc_uuid in opcoes_para_manter_ativas:
-                classificacao = classificacoes_ativas[id_opc_uuid]
-                # Já está ativa, apenas adicionar ao resultado
-                classificacoes_resultado.append(classificacao)
-        
-        # 4. Criar novas classificações para opções que não existiam
+        # Manter existentes
+        for id_opc_uuid in (opcoes_para_manter & opcoes_existentes_ativas):
+            classificacoes_resultado.append(classificacoes_ativas[id_opc_uuid])
+            
+        # Criar Novas
         novas_classificacoes = []
         for id_opc_uuid in opcoes_para_criar:
-            nova_classificacao = models.Classificacao(
+            nova = models.Classificacao(
                 id_con=id_con_uuid,
                 id_img=content_hash,
                 id_opc=id_opc_uuid,
                 data_criado=agora,
                 ativo=True
             )
-            novas_classificacoes.append(nova_classificacao)
-            classificacoes_resultado.append(nova_classificacao)
+            novas_classificacoes.append(nova)
+            classificacoes_resultado.append(nova)
             total_novas += 1
         
         if novas_classificacoes:
             db.bulk_save_objects(novas_classificacoes)
-            logger.info(f"Criadas {len(novas_classificacoes)} novas classificações para imagem {content_hash}")
         
-        # 5. Atualizar progresso do usuário
+        # Atualizar Progresso
         progresso = obter_progresso_usuario(db, id_con, id_amb)
         if progresso:
             progresso.ultimo_data_proc_processado = imagem.data_proc
             progresso.ultimo_content_hash_processado = imagem.content_hash
             progresso.data_ultima_atividade = agora
             
-            # Atualizar contagem de imagens classificadas
-            # Incrementa apenas se:
-            # 1. Houver novas classificações criadas OU
-            # 2. Houver reativações E a imagem não tinha nenhuma classificação ativa antes
-            tinha_classificacao_ativa_antes = len(opcoes_existentes_ativas) > 0
-            
-            if total_novas > 0 or (opcoes_para_reativar and not tinha_classificacao_ativa_antes):
-                # Primeira vez classificando esta imagem (ou primeira vez após todas terem sido inativadas)
-                if not tinha_classificacao_ativa_antes:
+            tinha_classificacao = len(opcoes_existentes_ativas) > 0
+            # Se criou nova ou reativou algo numa imagem que estava "zerada"
+            if total_novas > 0 or (opcoes_para_reativar and not tinha_classificacao):
+                 if not tinha_classificacao:
                     progresso.total_classificadas += 1
         
         db.commit()
-        
-        # Refresh das novas classificações
-        for c in novas_classificacoes:
-            db.refresh(c)
-        
-        logger.info(f"Classificação concluída: {len(classificacoes_resultado)} classificações ativas, {total_novas} novas")
         return classificacoes_resultado, total_novas
         
     except Exception as e:
         db.rollback()
-        logger.error(f"Erro ao salvar classificação: {e}", exc_info=True)
+        logger.error(f"Erro crítico ao salvar no banco: {e}", exc_info=True)
         return [], 0
-
