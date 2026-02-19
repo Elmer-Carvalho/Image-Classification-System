@@ -26,30 +26,26 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["Autenticação"])
 
 def set_auth_cookie(response: Response, access_token: str):
-    """Define o cookie HttpOnly com o token de acesso."""
+    """Define o cookie HttpOnly com o token de acesso. Usa settings para SameSite/Secure (produção cross-origin exige SameSite=none e Secure=true)."""
+    samesite = (settings.COOKIE_SAMESITE or "lax").strip().lower()
+    if samesite == "none" and not settings.COOKIE_SECURE:
+        # Navegadores exigem Secure=True quando SameSite=None
+        samesite = "lax"
     response.set_cookie(
         key="access_token",
         value=access_token,
         max_age=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        httponly=True,   # Mantém True para segurança
-        samesite="lax",  # "Lax" funciona bem para localhost entre portas diferentes
-        secure=False,    # Deve ser False para HTTP (sem SSL) em localhost
-        path="/"
+        httponly=settings.COOKIE_HTTPONLY,
+        samesite=samesite,
+        secure=settings.COOKIE_SECURE,
+        path="/",
+        domain=settings.COOKIE_DOMAIN if settings.COOKIE_DOMAIN else None,
     )
-    
-    # WORKAROUND CRÍTICO para problemas de SameSite=Lax em desenvolvimento (HTTP + Cross-Port)
-    # Se não estiver em modo seguro (Secure=False), remove o atributo SameSite
-    # para evitar que navegadores como Chrome bloqueiem o cookie em requisições cross-port (localhost)
-    if not settings.COOKIE_SECURE:
-        header = response.headers.get("set-cookie", "")
-        if header:
-            # Substitui 'SameSite=Lax' ou 'SameSite=Strict' por nada no header
-            samesite_attr = f"; samesite={settings.COOKIE_SAMESITE.lower()}"
-            header = header.replace(samesite_attr, "")
-            # Substitui 'SameSite=Lax' ou 'SameSite=Strict' com capitalização (fallback)
-            samesite_attr_cap = f"; SameSite={settings.COOKIE_SAMESITE.capitalize()}"
-            header = header.replace(samesite_attr_cap, "")
-            response.headers["set-cookie"] = header
+    # Em desenvolvimento (HTTP, Secure=False): remover SameSite do header para cross-port localhost
+    if not settings.COOKIE_SECURE and header := response.headers.get("set-cookie", ""):
+        for attr in (f"; samesite={samesite}", f"; SameSite={samesite.capitalize()}"):
+            header = header.replace(attr, "")
+        response.headers["set-cookie"] = header
 
 def clear_auth_cookie(response: Response):
     """Remove o cookie de autenticação."""
