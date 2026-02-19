@@ -18,7 +18,7 @@ def retry_request(
     request_func: Callable,
     max_retries: int = None,
     retry_delay: int = None,
-    retryable_exceptions: tuple = (requests.exceptions.Timeout, requests.exceptions.ConnectionError)
+    retryable_exceptions: tuple = None
 ) -> Any:
     """
     Executa uma requisição HTTP com retry automático.
@@ -27,7 +27,7 @@ def retry_request(
         request_func: Função que executa a requisição (deve retornar response)
         max_retries: Número máximo de tentativas (usa settings se None)
         retry_delay: Delay entre tentativas em segundos (usa settings se None)
-        retryable_exceptions: Tupla de exceções que devem ser retentadas
+        retryable_exceptions: Tupla de exceções que devem ser retentadas (None = padrão)
     
     Returns:
         Response da requisição bem-sucedida
@@ -38,12 +38,34 @@ def retry_request(
     max_retries = max_retries or settings.NEXTCLOUD_SYNC_MAX_RETRIES
     retry_delay = retry_delay or settings.NEXTCLOUD_SYNC_RETRY_DELAY
     
+    # Exceções retentáveis padrão: Timeout, ConnectionError e HTTPError 5xx
+    if retryable_exceptions is None:
+        retryable_exceptions = (
+            requests.exceptions.Timeout,
+            requests.exceptions.ConnectionError,
+            requests.exceptions.HTTPError  # Inclui erros HTTP como 503
+        )
+    
     last_exception = None
     
     for attempt in range(max_retries):
         try:
             return request_func()
         except retryable_exceptions as e:
+            # Verificar se é HTTPError e se é retentável (5xx)
+            if isinstance(e, requests.exceptions.HTTPError):
+                if hasattr(e, 'response') and e.response is not None:
+                    status_code = e.response.status_code
+                    # Apenas retentar erros 5xx (erros do servidor) e alguns 4xx específicos
+                    if status_code < 500:
+                        # Erros 4xx (exceto 408 Request Timeout) não são retentáveis
+                        if status_code == 408:  # Request Timeout é retentável
+                            pass  # Continuar com retry
+                        else:
+                            # Erros 4xx não são retentáveis (401, 403, 404, etc)
+                            logger.error(f"❌ Erro HTTP {status_code} não retentável: {e}")
+                            raise
+            
             last_exception = e
             attempt_num = attempt + 1
             
