@@ -42,10 +42,12 @@ def set_auth_cookie(response: Response, access_token: str):
         domain=settings.COOKIE_DOMAIN if settings.COOKIE_DOMAIN else None,
     )
     # Em desenvolvimento (HTTP, Secure=False): remover SameSite do header para cross-port localhost
-    if not settings.COOKIE_SECURE and header := response.headers.get("set-cookie", ""):
-        for attr in (f"; samesite={samesite}", f"; SameSite={samesite.capitalize()}"):
-            header = header.replace(attr, "")
-        response.headers["set-cookie"] = header
+    if not settings.COOKIE_SECURE:
+        header = response.headers.get("set-cookie", "")
+        if header:
+            for attr in (f"; samesite={samesite}", f"; SameSite={samesite.capitalize()}"):
+                header = header.replace(attr, "")
+            response.headers["set-cookie"] = header
 
 def clear_auth_cookie(response: Response):
     """Remove o cookie de autenticação."""
