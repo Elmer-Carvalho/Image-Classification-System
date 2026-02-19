@@ -444,6 +444,10 @@ class NextCloudSyncService:
                 logger.error(f"Erro na sincronização Activity API: {error_msg}")
                 self.sync_cache.increment_activity_api_failures()
                 self.sync_cache.update_sync_result('error', 'activity_api', error_msg)
+                
+                # Verificar se servidor está completamente offline
+                self._check_server_offline_status()
+                
                 return {'status': 'error', 'method': 'activity_api', 'error': error_msg}
             
             finally:
@@ -460,7 +464,7 @@ class NextCloudSyncService:
         
         Args:
             db: Sessão do banco de dados
-            
+        
         Returns:
             Dicionário com resultado
         """
@@ -481,6 +485,8 @@ class NextCloudSyncService:
                 now = local_to_utc(tz_now())
                 self.sync_cache.update_last_webdav_sync(now)
                 self.sync_cache.update_sync_result('success', 'webdav')
+                self.sync_cache.reset_webdav_failures()
+                self.sync_cache.set_server_offline(False)  # Servidor está online
                 
                 # Resetar falhas da Activity API (pode ter sido reativada)
                 self.sync_cache.reset_activity_api_failures()
@@ -498,7 +504,12 @@ class NextCloudSyncService:
             except Exception as e:
                 error_msg = str(e)
                 logger.error(f"Erro na sincronização WebDAV: {error_msg}")
+                self.sync_cache.increment_webdav_failures()
                 self.sync_cache.update_sync_result('error', 'webdav', error_msg)
+                
+                # Verificar se servidor está completamente offline
+                self._check_server_offline_status()
+                
                 return {'status': 'error', 'method': 'webdav', 'error': error_msg}
             
             finally:
@@ -507,7 +518,29 @@ class NextCloudSyncService:
         except Exception as e:
             error_msg = str(e)
             logger.error(f"Erro crítico na sincronização WebDAV: {error_msg}")
+            self.sync_cache.increment_webdav_failures()
+            self._check_server_offline_status()
             return {'status': 'error', 'error': error_msg}
+    
+    def _check_server_offline_status(self):
+        """
+        Verifica se o servidor está completamente offline e atualiza status.
+        Servidor é considerado offline quando ambos Activity API e WebDAV falharam.
+        """
+        status = self.sync_cache.get_sync_status()
+        if not status:
+            return
+        
+        # Se ambos têm falhas consecutivas >= 3, servidor está offline
+        activity_failed = not status.activity_api_available and status.activity_api_failures >= 3
+        webdav_failed = status.webdav_failures >= 3
+        
+        if activity_failed and webdav_failed:
+            self.sync_cache.set_server_offline(True)
+            logger.warning("⚠️ Servidor NextCloud detectado como OFFLINE (ambos métodos falhando)")
+        else:
+            # Se pelo menos um método funciona, servidor está online
+            self.sync_cache.set_server_offline(False)
     
     def get_sync_status(self) -> Dict[str, any]:
         """
@@ -528,6 +561,9 @@ class NextCloudSyncService:
                 'sync_in_progress': status.sync_in_progress,
                 'activity_api_available': status.activity_api_available,
                 'activity_api_failures': status.activity_api_failures,
+                'webdav_failures': status.webdav_failures,
+                'server_offline': status.server_offline,
+                'last_health_check': status.last_health_check.isoformat() if status.last_health_check else None,
                 'last_activity_api_sync': status.last_activity_api_sync.isoformat() if status.last_activity_api_sync else None,
                 'last_webdav_sync': status.last_webdav_sync.isoformat() if status.last_webdav_sync else None,
                 'last_sync_status': status.last_sync_status,

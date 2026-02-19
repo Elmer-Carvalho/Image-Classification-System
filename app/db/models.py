@@ -268,6 +268,9 @@ class SyncStatus(Base):
     activity_api_available = Column(Boolean, nullable=False, default=True)  # Status da Activity API (disponível ou não)
     activity_api_last_check = Column(DateTime(timezone=True))  # Timestamp da última verificação da Activity API
     activity_api_failures = Column(Integer, nullable=False, default=0)  # Contador de falhas consecutivas da Activity API
+    webdav_failures = Column(Integer, nullable=False, default=0)  # Contador de falhas consecutivas do WebDAV
+    server_offline = Column(Boolean, nullable=False, default=False)  # Flag indicando se servidor NextCloud está completamente offline (ambos métodos falhando)
+    last_health_check = Column(DateTime(timezone=True))  # Timestamp da última verificação de saúde do servidor
     sync_in_progress = Column(Boolean, nullable=False, default=False)  # Flag para evitar execuções simultâneas de sincronização
     last_sync_status = Column(String(50))  # Status da última sincronização: 'success', 'error', 'partial'
     last_sync_error = Column(Text)  # Mensagem de erro da última sincronização (se houver)

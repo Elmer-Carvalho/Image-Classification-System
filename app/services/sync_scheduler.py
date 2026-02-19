@@ -27,6 +27,7 @@ class SyncScheduler:
         self.sync_service = sync_service
         self.activity_thread: Optional[threading.Thread] = None
         self.webdav_thread: Optional[threading.Thread] = None
+        self.health_check_thread: Optional[threading.Thread] = None
         self.running = False
         self.stop_event = threading.Event()
     
@@ -55,6 +56,14 @@ class SyncScheduler:
         )
         self.webdav_thread.start()
         
+        # Iniciar thread de verificação de saúde do servidor
+        self.health_check_thread = threading.Thread(
+            target=self._health_check_loop,
+            name="NextCloud-HealthCheck",
+            daemon=True
+        )
+        self.health_check_thread.start()
+        
         logger.info("Agendador de sincronização iniciado")
     
     def stop(self):
@@ -70,6 +79,8 @@ class SyncScheduler:
             self.activity_thread.join(timeout=5)
         if self.webdav_thread:
             self.webdav_thread.join(timeout=5)
+        if self.health_check_thread:
+            self.health_check_thread.join(timeout=5)
         
         logger.info("Agendador de sincronização parado")
     
@@ -205,4 +216,64 @@ class SyncScheduler:
                 logger.error(f"❌ [Scheduler] Erro no loop de sincronização WebDAV: {e}")
                 # Aguardar antes de tentar novamente
                 self.stop_event.wait(interval_seconds)
+    
+    def _health_check_loop(self):
+        """Loop de verificação de saúde do servidor NextCloud."""
+        # Verificar a cada 5 minutos quando servidor está offline, a cada 30 minutos quando online
+        check_interval_offline = 5 * 60  # 5 minutos
+        check_interval_online = 30 * 60  # 30 minutos
+        
+        logger.info("🏥 [Scheduler] Health check iniciado")
+        
+        while self.running and not self.stop_event.is_set():
+            try:
+                status = self.sync_service.get_sync_status()
+                server_offline = status.get('server_offline', False)
+                
+                if server_offline:
+                    # Servidor está offline - verificar mais frequentemente
+                    logger.info("🏥 [Scheduler] Servidor offline detectado - verificando recuperação...")
+                    
+                    # Usar health check do cliente NextCloud
+                    from app.services.nextcloud_service import get_nextcloud_client
+                    client = get_nextcloud_client()
+                    health = client.check_server_health()
+                    
+                    # Atualizar timestamp do health check
+                    from app.services.sync_cache import SyncCache
+                    from app.db.database import SessionLocal
+                    db = SessionLocal()
+                    try:
+                        cache = SyncCache(db)
+                        cache.update_health_check(local_to_utc(tz_now()))
+                        
+                        if health.get('online', False):
+                            logger.info("✅ [Scheduler] Servidor NextCloud voltou a ficar ONLINE!")
+                            cache.set_server_offline(False)
+                            
+                            # Resetar contadores de falhas se pelo menos um método funciona
+                            if health.get('activity_api_available', False):
+                                cache.set_activity_api_available(True)
+                                cache.reset_activity_api_failures()
+                                logger.info("✅ [Scheduler] Activity API disponível novamente")
+                            
+                            if health.get('webdav_available', False):
+                                cache.reset_webdav_failures()
+                                logger.info("✅ [Scheduler] WebDAV disponível novamente")
+                        else:
+                            logger.debug(f"🏥 [Scheduler] Servidor ainda offline: {health.get('message', 'unknown')}")
+                    finally:
+                        db.close()
+                    
+                    # Aguardar próximo check (mais frequente quando offline)
+                    self.stop_event.wait(check_interval_offline)
+                else:
+                    # Servidor está online - verificar menos frequentemente
+                    logger.debug(f"🏥 [Scheduler] Servidor online - próximo check em {check_interval_online/60:.0f} minutos")
+                    self.stop_event.wait(check_interval_online)
+            
+            except Exception as e:
+                logger.error(f"❌ [Scheduler] Erro no loop de health check: {e}")
+                # Aguardar antes de tentar novamente
+                self.stop_event.wait(check_interval_offline)
 

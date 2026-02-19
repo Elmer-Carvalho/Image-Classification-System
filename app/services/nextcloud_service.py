@@ -4,13 +4,61 @@ Responsável por listar pastas, filtrar imagens e fazer download de arquivos.
 """
 import requests
 from requests.auth import HTTPBasicAuth
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Callable
 from xml.etree import ElementTree as ET
 from datetime import datetime
 import logging
+import time
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+def retry_request(
+    request_func: Callable,
+    max_retries: int = None,
+    retry_delay: int = None,
+    retryable_exceptions: tuple = (requests.exceptions.Timeout, requests.exceptions.ConnectionError)
+) -> Any:
+    """
+    Executa uma requisição HTTP com retry automático.
+    
+    Args:
+        request_func: Função que executa a requisição (deve retornar response)
+        max_retries: Número máximo de tentativas (usa settings se None)
+        retry_delay: Delay entre tentativas em segundos (usa settings se None)
+        retryable_exceptions: Tupla de exceções que devem ser retentadas
+    
+    Returns:
+        Response da requisição bem-sucedida
+    
+    Raises:
+        Última exceção se todas as tentativas falharem
+    """
+    max_retries = max_retries or settings.NEXTCLOUD_SYNC_MAX_RETRIES
+    retry_delay = retry_delay or settings.NEXTCLOUD_SYNC_RETRY_DELAY
+    
+    last_exception = None
+    
+    for attempt in range(max_retries):
+        try:
+            return request_func()
+        except retryable_exceptions as e:
+            last_exception = e
+            attempt_num = attempt + 1
+            
+            if attempt_num < max_retries:
+                logger.warning(f"⚠️ Tentativa {attempt_num}/{max_retries} falhou: {e}. Tentando novamente em {retry_delay}s...")
+                time.sleep(retry_delay)
+            else:
+                logger.error(f"❌ Todas as {max_retries} tentativas falharam. Último erro: {e}")
+        except Exception as e:
+            # Exceções não retentáveis são propagadas imediatamente
+            logger.error(f"❌ Erro não retentável: {e}")
+            raise
+    
+    # Se chegou aqui, todas as tentativas falharam
+    raise last_exception
 
 
 class NextCloudClient:
@@ -257,7 +305,7 @@ class NextCloudClient:
             'Depth': str(depth)
         }
         
-        try:
+        def _make_request():
             response = requests.request(
                 'PROPFIND',
                 url,
@@ -267,9 +315,11 @@ class NextCloudClient:
                 timeout=30,
                 verify=self.verify_ssl
             )
-            
             response.raise_for_status()
-            
+            return response
+        
+        try:
+            response = retry_request(_make_request)
             return self._parse_propfind_response(response.text)
         
         except requests.exceptions.RequestException as e:
@@ -324,7 +374,7 @@ class NextCloudClient:
         """
         url = self._build_url(file_path)
         
-        try:
+        def _make_request():
             response = requests.get(
                 url,
                 auth=self.auth,
@@ -332,9 +382,11 @@ class NextCloudClient:
                 timeout=60,
                 verify=self.verify_ssl
             )
-            
             response.raise_for_status()
             return response
+        
+        try:
+            return retry_request(_make_request)
         
         except requests.exceptions.RequestException as e:
             logger.error(f"Erro ao baixar arquivo do NextCloud: {e}")
@@ -455,6 +507,88 @@ class NextCloudClient:
                 'endpoint': activity_url,
                 'status_code': None
             }
+    
+    def check_server_health(self) -> Dict[str, Any]:
+        """
+        Verifica a saúde geral do servidor NextCloud testando ambos Activity API e WebDAV.
+        Usado para detectar se o servidor está completamente offline.
+        
+        Returns:
+            Dicionário com informações sobre a saúde do servidor:
+            {
+                'online': bool,
+                'activity_api_available': bool,
+                'webdav_available': bool,
+                'message': str,
+                'checks': {
+                    'activity_api': Dict,
+                    'webdav': Dict
+                }
+            }
+        """
+        checks = {
+            'activity_api': None,
+            'webdav': None
+        }
+        
+        # Verificar Activity API
+        activity_check = self.check_activity_api_available()
+        checks['activity_api'] = activity_check
+        activity_available = activity_check.get('available', False)
+        
+        # Verificar WebDAV (tentando listar raiz)
+        webdav_available = False
+        webdav_message = ''
+        try:
+            # Tenta listar a raiz do WebDAV como health check
+            url = self._build_url('')
+            response = requests.request(
+                'PROPFIND',
+                url,
+                headers={'Depth': '0'},
+                auth=self.auth,
+                timeout=10,
+                verify=self.verify_ssl
+            )
+            
+            if response.status_code in [200, 207]:  # 207 Multi-Status é resposta válida do PROPFIND
+                webdav_available = True
+                webdav_message = 'WebDAV está disponível e acessível'
+            else:
+                webdav_message = f'WebDAV retornou status {response.status_code}'
+        
+        except requests.exceptions.Timeout:
+            webdav_message = 'Timeout ao tentar acessar WebDAV'
+        except requests.exceptions.ConnectionError:
+            webdav_message = 'Erro de conexão ao tentar acessar WebDAV'
+        except Exception as e:
+            webdav_message = f'Erro ao verificar WebDAV: {str(e)}'
+        
+        checks['webdav'] = {
+            'available': webdav_available,
+            'message': webdav_message
+        }
+        
+        # Servidor está online se pelo menos um método funciona
+        server_online = activity_available or webdav_available
+        
+        if server_online:
+            if activity_available and webdav_available:
+                message = 'Servidor NextCloud está online (Activity API e WebDAV disponíveis)'
+            elif activity_available:
+                message = 'Servidor NextCloud está online (Activity API disponível, WebDAV indisponível)'
+            else:
+                message = 'Servidor NextCloud está online (WebDAV disponível, Activity API indisponível)'
+        else:
+            message = 'Servidor NextCloud está offline (Activity API e WebDAV indisponíveis)'
+        
+        return {
+            'online': server_online,
+            'activity_api_available': activity_available,
+            'webdav_available': webdav_available,
+            'message': message,
+            'checks': checks
+        }
 
 
 # Instância global do cliente (singleton)

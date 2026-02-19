@@ -79,16 +79,23 @@ class ActivityAPISync:
         
         try:
             logger.debug(f"📡 Buscando eventos Activity API desde timestamp: {since_param}")
-            response = requests.get(
-                activity_url,
-                auth=self.auth,
-                headers=headers,
-                params=params,
-                timeout=30,
-                verify=self.verify_ssl
-            )
             
-            response.raise_for_status()
+            # Usar retry para requisições críticas
+            from app.services.nextcloud_service import retry_request
+            
+            def _make_request():
+                response = requests.get(
+                    activity_url,
+                    auth=self.auth,
+                    headers=headers,
+                    params=params,
+                    timeout=30,
+                    verify=self.verify_ssl
+                )
+                response.raise_for_status()
+                return response
+            
+            response = retry_request(_make_request)
             data = response.json()
             
             if 'ocs' in data and 'data' in data['ocs']:

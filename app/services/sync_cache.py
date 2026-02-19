@@ -35,6 +35,8 @@ class SyncCache:
                     id=1,
                     activity_api_available=True,
                     activity_api_failures=0,
+                    webdav_failures=0,
+                    server_offline=False,
                     sync_in_progress=False,
                     created_at=now,
                     updated_at=now
@@ -73,10 +75,12 @@ class SyncCache:
         if status:
             status.last_webdav_sync = timestamp
             status.updated_at = local_to_utc(tz_now())
-            # Resetar contador de falhas da Activity API quando WebDAV sync acontece
+            # Resetar contadores de falhas quando WebDAV sync acontece com sucesso
             status.activity_api_failures = 0
+            status.webdav_failures = 0
+            status.server_offline = False  # Servidor está online se WebDAV funcionou
             self.db.commit()
-            logger.info("WebDAV sync concluída - activity_api_failures resetado para 0")
+            logger.info("WebDAV sync concluída - contadores de falhas resetados")
     
     def set_activity_api_available(self, available: bool):
         """Marca disponibilidade da Activity API."""
@@ -108,6 +112,43 @@ class SyncCache:
         status = self.get_sync_status()
         if status:
             status.activity_api_failures = 0
+            status.updated_at = local_to_utc(tz_now())
+            self.db.commit()
+    
+    def increment_webdav_failures(self):
+        """Incrementa contador de falhas do WebDAV."""
+        status = self.get_sync_status()
+        if status:
+            status.webdav_failures += 1
+            status.updated_at = local_to_utc(tz_now())
+            self.db.commit()
+            logger.warning(f"WebDAV falhou - contador: {status.webdav_failures}")
+    
+    def reset_webdav_failures(self):
+        """Reseta contador de falhas do WebDAV."""
+        status = self.get_sync_status()
+        if status:
+            status.webdav_failures = 0
+            status.updated_at = local_to_utc(tz_now())
+            self.db.commit()
+    
+    def set_server_offline(self, offline: bool):
+        """Marca servidor como offline ou online."""
+        status = self.get_sync_status()
+        if status:
+            status.server_offline = offline
+            status.updated_at = local_to_utc(tz_now())
+            self.db.commit()
+            if offline:
+                logger.warning("Servidor NextCloud marcado como OFFLINE")
+            else:
+                logger.info("Servidor NextCloud marcado como ONLINE")
+    
+    def update_health_check(self, timestamp):
+        """Atualiza timestamp da última verificação de saúde do servidor."""
+        status = self.get_sync_status()
+        if status:
+            status.last_health_check = timestamp
             status.updated_at = local_to_utc(tz_now())
             self.db.commit()
     
