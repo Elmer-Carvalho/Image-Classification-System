@@ -264,15 +264,10 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Configurar CORS
-origins = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-]
-
+# Configurar CORS (origens configuráveis via CORS_ORIGINS no .env)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=settings.get_cors_origins_list(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -52,6 +52,7 @@ Criado automaticamente no primeiro startup se não existir usuário administrado
 |----------|-----------|
 | `API_HOST` | Host do servidor (ex.: 0.0.0.0) |
 | `API_PORT` | Porta (ex.: 8000) |
+| `CORS_ORIGINS` | Origens permitidas para CORS, separadas por vírgula (ex.: `https://meuapp.com,https://www.meuapp.com`). Apenas URLs com `http://` ou `https://` são aceitas. Em branco ou não definido: usa padrão localhost (5173). |
 
 ### NextCloud e sincronização
 

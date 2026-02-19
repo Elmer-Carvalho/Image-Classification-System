@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     API_HOST: str = "0.0.0.0"
     API_PORT: int = 8000
     
+    # CORS: origens permitidas para requisições do navegador (separadas por vírgula)
+    # Ex.: "https://meuapp.com,https://www.meuapp.com" ou em dev "http://localhost:5173,http://127.0.0.1:5173"
+    CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
+    
     # File monitoring
     ALLOWED_EXTENSIONS: list = [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff"]
     MAX_FILE_SIZE: int = 10 * 1024 * 1024  # 10MB
@@ -64,5 +68,19 @@ class Settings(BaseSettings):
         # Ensure directories exist
         # Path(self.RAW_IMAGES_PATH).mkdir(parents=True, exist_ok=True)
         # Path(self.PROCESSED_IMAGES_PATH).mkdir(parents=True, exist_ok=True)
+
+    def get_cors_origins_list(self) -> list[str]:
+        """
+        Retorna lista de origens permitidas para CORS.
+        Apenas URLs que começam com http:// ou https:// são aceitas (segurança).
+        """
+        origins: list[str] = []
+        for raw in self.CORS_ORIGINS.split(","):
+            origin = raw.strip()
+            if not origin:
+                continue
+            if origin.startswith("http://") or origin.startswith("https://"):
+                origins.append(origin)
+        return origins if origins else ["http://localhost:5173", "http://127.0.0.1:5173"]
 
 settings = Settings() 
