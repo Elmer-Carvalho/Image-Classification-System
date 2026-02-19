@@ -258,3 +258,6 @@ local/
 # Scripts folder (test code)
 Script/
 scripts/
+
+# Configurações/arquivos internos (não versionar)
+CONTRIBUTING.md
