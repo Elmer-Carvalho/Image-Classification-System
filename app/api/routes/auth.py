@@ -25,6 +25,17 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["Autenticação"])
 
+def _cookie_domain_or_none() -> str | None:
+    """Retorna None se COOKIE_DOMAIN estiver vazio ou for a string 'None' (evita cookie inválido no Render)."""
+    v = settings.COOKIE_DOMAIN
+    if v is None:
+        return None
+    s = str(v).strip().lower()
+    if s in ("", "none"):
+        return None
+    return v
+
+
 def set_auth_cookie(response: Response, access_token: str):
     """Define o cookie HttpOnly com o token de acesso. Usa settings para SameSite/Secure (produção cross-origin exige SameSite=none e Secure=true)."""
     samesite = (settings.COOKIE_SAMESITE or "lax").strip().lower()
@@ -39,7 +50,7 @@ def set_auth_cookie(response: Response, access_token: str):
         samesite=samesite,
         secure=settings.COOKIE_SECURE,
         path="/",
-        domain=settings.COOKIE_DOMAIN if settings.COOKIE_DOMAIN else None,
+        domain=_cookie_domain_or_none(),
     )
     # Em desenvolvimento (HTTP, Secure=False): remover SameSite do header para cross-port localhost
     if not settings.COOKIE_SECURE:
@@ -51,12 +62,11 @@ def set_auth_cookie(response: Response, access_token: str):
 
 def clear_auth_cookie(response: Response):
     """Remove o cookie de autenticação."""
-    # Primeiro, tenta deletar via Starlette
     response.delete_cookie(
         key="access_token",
-        samesite=settings.COOKIE_SAMESITE,
+        samesite=settings.COOKIE_SAMESITE or "lax",
         secure=settings.COOKIE_SECURE,
-        domain=settings.COOKIE_DOMAIN,
+        domain=_cookie_domain_or_none(),
         path="/"
     )
     
