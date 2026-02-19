@@ -183,8 +183,8 @@ htmlcov/
 *.sql
 *.dump
 
-# Alembic
-alembic.ini
+# Alembic (manter alembic.ini e pasta alembic/ no repositório para migrações)
+# alembic.ini removido do ignore - necessário para deploy
 
 # Logs
 logs/

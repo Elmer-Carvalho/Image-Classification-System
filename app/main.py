@@ -49,13 +49,25 @@ async def lifespan(app: FastAPI):
     is_production = settings.ENV.lower() == "production"
     
     if is_production:
-        # Produção: apenas criar tabelas faltantes, sem excluir dados existentes
-        print(f"📊 Ambiente: PRODUCTION - Criando tabelas faltantes (sem excluir dados)...")
+        # Produção: criar tabelas faltantes e aplicar migrações Alembic
+        print(f"📊 Ambiente: PRODUCTION - Aplicando schema e migrações...")
         try:
             Base.metadata.create_all(bind=engine, checkfirst=True)
             print("✅ Tabelas verificadas/criadas com sucesso!")
         except Exception as e:
             print(f"❌ Erro ao criar tabelas: {e}")
+            raise
+        # Executar migrações Alembic (atualiza schema existente, ex.: novas colunas)
+        try:
+            from app.db.run_migrations import run_upgrade_head
+            print("🔄 Executando migrações Alembic (aguarde)...")
+            run_upgrade_head()
+            print("✅ Migrações Alembic concluídas com sucesso!")
+        except FileNotFoundError as e:
+            print(f"⚠️ Alembic não configurado ou alembic.ini ausente: {e}")
+            print("   Continuando sem migrações.")
+        except Exception as e:
+            print(f"❌ Erro ao executar migrações Alembic: {e}")
             raise
     else:
         # Desenvolvimento: limpar banco e recriar do zero
@@ -110,6 +122,13 @@ async def lifespan(app: FastAPI):
                 raise
         
         print("✅ Banco de dados recriado com sucesso!")
+        # Marcar banco como atualizado (evita reaplicar migrações em dev)
+        try:
+            from app.db.run_migrations import run_stamp_head
+            run_stamp_head()
+            print("✅ Alembic stamp head concluído (dev).")
+        except Exception as e:
+            print(f"⚠️ Alembic stamp ignorado: {e}")
 
     # Popular eventos de auditoria após garantir que as tabelas existem
     from app.db.database import SessionLocal, popular_eventos_auditoria
