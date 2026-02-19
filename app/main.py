@@ -45,58 +45,71 @@ async def lifespan(app: FastAPI):
         print("❌ Falha ao conectar com o banco de dados. Encerrando aplicação.")
         raise Exception("Não foi possível conectar com o banco de dados")
     
-    # Recriar banco de dados do zero (desenvolvimento)
-    print("📊 Recriando banco de dados do zero...")
-    schema_dropped = False
-    try:
-        # Primeiro, tentar remover constraints antigas com CASCADE usando SQL direto
-        with engine.begin() as conn:
-            from sqlalchemy import text
-            # Remover todas as tabelas com CASCADE (drop schema e recria)
-            conn.execute(text("DROP SCHEMA IF EXISTS public CASCADE;"))
-            conn.execute(text("CREATE SCHEMA public;"))
-            # Obter o usuário atual do banco de dados
-            result = conn.execute(text("SELECT current_user;"))
-            current_user = result.scalar()
-            # Dar permissões ao usuário atual
-            conn.execute(text(f"GRANT ALL ON SCHEMA public TO {current_user};"))
-            conn.execute(text("GRANT ALL ON SCHEMA public TO public;"))
-        schema_dropped = True
-        print("✅ Schema público removido e recriado com sucesso!")
-    except Exception as e:
-        # Se falhar, tentar método padrão do SQLAlchemy com checkfirst=False
-        print(f"⚠️ Método CASCADE falhou, tentando método padrão: {e}")
-        try:
-            # Tentar dropar todas as tabelas, ignorando erros de dependências
-            with engine.begin() as conn:
-                from sqlalchemy import text, inspect
-                inspector = inspect(engine)
-                # Listar todas as tabelas e dropar uma por uma com CASCADE
-                tables = inspector.get_table_names()
-                for table in tables:
-                    try:
-                        conn.execute(text(f"DROP TABLE IF EXISTS {table} CASCADE;"))
-                    except Exception:
-                        pass  # Ignorar erros individuais
-            Base.metadata.drop_all(bind=engine, checkfirst=False)
-        except Exception as e2:
-            print(f"⚠️ Erro ao dropar tabelas: {e2}")
-            # Se ainda falhar, continuar e tentar criar (pode dar erro de tabela já existe)
-            pass
+    # Gerenciar schema do banco de dados baseado no ambiente
+    is_production = settings.ENV.lower() == "production"
     
-    # Criar todas as tabelas (apenas se o schema foi dropado ou se drop_all funcionou)
-    if schema_dropped:
-        # Schema já foi recriado, apenas criar as tabelas
-        Base.metadata.create_all(bind=engine)
-    else:
-        # Tentar criar mesmo assim (pode dar erro se tabelas ainda existirem)
+    if is_production:
+        # Produção: apenas criar tabelas faltantes, sem excluir dados existentes
+        print(f"📊 Ambiente: PRODUCTION - Criando tabelas faltantes (sem excluir dados)...")
         try:
-            Base.metadata.create_all(bind=engine)
+            Base.metadata.create_all(bind=engine, checkfirst=True)
+            print("✅ Tabelas verificadas/criadas com sucesso!")
         except Exception as e:
-            print(f"⚠️ Erro ao criar tabelas: {e}")
+            print(f"❌ Erro ao criar tabelas: {e}")
             raise
-    
-    print("✅ Banco de dados recriado com sucesso!")
+    else:
+        # Desenvolvimento: limpar banco e recriar do zero
+        print(f"📊 Ambiente: DEVELOPMENT - Recriando banco de dados do zero...")
+        schema_dropped = False
+        try:
+            # Primeiro, tentar remover constraints antigas com CASCADE usando SQL direto
+            with engine.begin() as conn:
+                from sqlalchemy import text
+                # Remover todas as tabelas com CASCADE (drop schema e recria)
+                conn.execute(text("DROP SCHEMA IF EXISTS public CASCADE;"))
+                conn.execute(text("CREATE SCHEMA public;"))
+                # Obter o usuário atual do banco de dados
+                result = conn.execute(text("SELECT current_user;"))
+                current_user = result.scalar()
+                # Dar permissões ao usuário atual
+                conn.execute(text(f"GRANT ALL ON SCHEMA public TO {current_user};"))
+                conn.execute(text("GRANT ALL ON SCHEMA public TO public;"))
+            schema_dropped = True
+            print("✅ Schema público removido e recriado com sucesso!")
+        except Exception as e:
+            # Se falhar, tentar método padrão do SQLAlchemy com checkfirst=False
+            print(f"⚠️ Método CASCADE falhou, tentando método padrão: {e}")
+            try:
+                # Tentar dropar todas as tabelas, ignorando erros de dependências
+                with engine.begin() as conn:
+                    from sqlalchemy import text, inspect
+                    inspector = inspect(engine)
+                    # Listar todas as tabelas e dropar uma por uma com CASCADE
+                    tables = inspector.get_table_names()
+                    for table in tables:
+                        try:
+                            conn.execute(text(f"DROP TABLE IF EXISTS {table} CASCADE;"))
+                        except Exception:
+                            pass  # Ignorar erros individuais
+                Base.metadata.drop_all(bind=engine, checkfirst=False)
+            except Exception as e2:
+                print(f"⚠️ Erro ao dropar tabelas: {e2}")
+                # Se ainda falhar, continuar e tentar criar (pode dar erro de tabela já existe)
+                pass
+        
+        # Criar todas as tabelas (apenas se o schema foi dropado ou se drop_all funcionou)
+        if schema_dropped:
+            # Schema já foi recriado, apenas criar as tabelas
+            Base.metadata.create_all(bind=engine)
+        else:
+            # Tentar criar mesmo assim (pode dar erro se tabelas ainda existirem)
+            try:
+                Base.metadata.create_all(bind=engine)
+            except Exception as e:
+                print(f"⚠️ Erro ao criar tabelas: {e}")
+                raise
+        
+        print("✅ Banco de dados recriado com sucesso!")
 
     # Popular eventos de auditoria após garantir que as tabelas existem
     from app.db.database import SessionLocal, popular_eventos_auditoria
@@ -147,12 +160,17 @@ async def lifespan(app: FastAPI):
     finally:
         session.close()
 
+    # IMPORTANTE: Aguardar conclusão da criação de tabelas antes de iniciar sincronização
+    # Isso garante que as threads de sincronização não tentem acessar tabelas inexistentes
+    print("✅ Todas as tabelas e dados iniciais foram criados/verificados com sucesso!")
+    
     try:
         # Criar factory de sessão
         def get_db_session():
+            """Factory que cria uma nova sessão do banco para cada thread."""
             return SessionLocal()
         
-        # Inicializar sincronização NextCloud
+        # Inicializar sincronização NextCloud (após garantir que tabelas existem)
         from app.services.nextcloud_service import get_nextcloud_client
         from app.services.nextcloud_sync_service import NextCloudSyncService
         from app.services.sync_scheduler import SyncScheduler
@@ -162,6 +180,7 @@ async def lifespan(app: FastAPI):
             sync_service = NextCloudSyncService(get_db_session, nextcloud_client)
             
             # Sincronização inicial em background (se configurado)
+            # IMPORTANTE: Esta thread só será iniciada após todas as tabelas estarem criadas
             if settings.NEXTCLOUD_SYNC_INITIAL_ON_STARTUP:
                 print(f"🔄 Sincronização inicial habilitada (NEXTCLOUD_SYNC_INITIAL_ON_STARTUP={settings.NEXTCLOUD_SYNC_INITIAL_ON_STARTUP})")
                 def run_initial_sync():
@@ -175,8 +194,11 @@ async def lifespan(app: FastAPI):
                             print(f"⚠️ Sincronização inicial concluída com avisos: {result.get('error', 'unknown')}")
                     except Exception as e:
                         print(f"❌ Erro na sincronização inicial: {e}")
+                        import traceback
+                        traceback.print_exc()
                 
                 # Executar em thread separada para não bloquear o startup
+                # Esta thread só será iniciada após todas as tabelas estarem criadas acima
                 sync_thread = threading.Thread(
                     target=run_initial_sync,
                     name="NextCloud-Initial-Sync",
@@ -188,6 +210,7 @@ async def lifespan(app: FastAPI):
                 print(f"⏭️ Sincronização inicial desabilitada (NEXTCLOUD_SYNC_INITIAL_ON_STARTUP={settings.NEXTCLOUD_SYNC_INITIAL_ON_STARTUP})")
             
             # Iniciar agendador de sincronização periódica
+            # IMPORTANTE: O scheduler também só será iniciado após todas as tabelas estarem criadas
             sync_scheduler = SyncScheduler(sync_service)
             sync_scheduler.start()
             print("✅ Agendador de sincronização NextCloud iniciado")
@@ -195,9 +218,13 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             print(f"⚠️ Erro ao inicializar sincronização NextCloud: {e}")
             print("   Sistema continuará sem sincronização automática")
+            import traceback
+            traceback.print_exc()
         
     except Exception as e:
-        print(f"Erro ao inicializar serviços: {e}")
+        print(f"❌ Erro ao inicializar serviços: {e}")
+        import traceback
+        traceback.print_exc()
     
     yield
     

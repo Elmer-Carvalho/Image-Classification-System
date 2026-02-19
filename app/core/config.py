@@ -3,6 +3,9 @@ from pathlib import Path
 import os
 
 class Settings(BaseSettings):
+    # Environment
+    ENV: str = "development"  # "development" ou "production"
+    
     # Database
     DATABASE_URL: str = "postgresql://user:password@localhost:5432/image_classification"
     
