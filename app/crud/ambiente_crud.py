@@ -1,8 +1,9 @@
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from app.db import models
 from sqlalchemy.exc import IntegrityError
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, Optional, Dict
 import uuid
 
 
@@ -288,6 +289,31 @@ def obter_conjuntos_do_ambiente(db: Session, id_amb):
     ).all()
     
     return [str(assoc.id_cnj) for assoc in associacoes]
+
+
+def obter_totais_imagens_por_ambiente(db: Session) -> Dict[uuid.UUID, int]:
+    """
+    Retorna o total de imagens por ambiente em uma única query.
+    Considera apenas conjuntos ativamente associados ao ambiente e imagens
+    com existe_no_nextcloud=True (mesma regra de GET /usuarios-ambientes/meus-ambientes).
+    
+    Args:
+        db: Sessão do banco de dados
+    
+    Returns:
+        Dicionário id_amb (UUID) -> total de imagens (int). Ambientes sem imagens não entram no dict (tratar como 0).
+    """
+    rows = (
+        db.query(models.AmbienteConjuntoImagens.id_amb, func.count(models.Imagem.content_hash).label("total"))
+        .join(models.Imagem, models.Imagem.id_cnj == models.AmbienteConjuntoImagens.id_cnj)
+        .filter(
+            models.AmbienteConjuntoImagens.ativo == True,
+            models.Imagem.existe_no_nextcloud == True,
+        )
+        .group_by(models.AmbienteConjuntoImagens.id_amb)
+        .all()
+    )
+    return {row.id_amb: row.total for row in rows}
 
 
 def atualizar_titulo_ambiente(db: Session, id_amb: str, novo_titulo: str) -> Optional[models.Ambiente]:

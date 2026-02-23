@@ -78,8 +78,10 @@ def criar_ambiente(
     
     nome_adm = admin.nome_completo
     
-    # Obter IDs de conjuntos associados
+    # Obter IDs de conjuntos associados e total de imagens do ambiente
     ids_conjuntos_associados = ambiente_crud.obter_conjuntos_do_ambiente(db, novo.id_amb)
+    totais = ambiente_crud.obter_totais_imagens_por_ambiente(db)
+    total_imagens = totais.get(novo.id_amb, 0)
     
     # Auditoria
     evento = db.query(EventoAuditoria).filter_by(nome="criar_ambiente").first()
@@ -106,7 +108,8 @@ def criar_ambiente(
         id_adm=str(novo.id_adm),
         nome_administrador=nome_adm,
         ativo=novo.ativo,
-        ids_conjuntos=ids_conjuntos_associados
+        ids_conjuntos=ids_conjuntos_associados,
+        total_imagens=total_imagens,
     )
 
 @router.get("/", response_model=list[AmbienteOut])
@@ -117,13 +120,15 @@ def listar_ambientes(
     """
     Lista todos os ambientes.
     - **Acesso:** Apenas administradores autenticados.
-    - **Resposta:** Lista de ambientes com informações completas, incluindo IDs dos conjuntos associados.
+    - **Resposta:** Lista de ambientes com informações completas, incluindo IDs dos conjuntos associados e total de imagens.
     """
     ambientes = ambiente_crud.listar_ambientes(db)
+    totais_imagens = ambiente_crud.obter_totais_imagens_por_ambiente(db)
     result = []
     for a in ambientes:
         nome_adm = a.administrador.usuario.nome_completo if a.administrador and a.administrador.usuario else "(desconhecido)"
         ids_conjuntos = ambiente_crud.obter_conjuntos_do_ambiente(db, a.id_amb)
+        total_imagens = totais_imagens.get(a.id_amb, 0)
         result.append(
             AmbienteOut(
                 id_amb=str(a.id_amb),
@@ -134,7 +139,8 @@ def listar_ambientes(
                 id_adm=str(a.id_adm),
                 nome_administrador=nome_adm,
                 ativo=a.ativo,
-                ids_conjuntos=ids_conjuntos
+                ids_conjuntos=ids_conjuntos,
+                total_imagens=total_imagens,
             )
         )
     return result
@@ -201,6 +207,8 @@ def reativar_ambiente_route(id_amb: str, admin: models.Usuario = Depends(require
         db.add(log)
         db.commit()
     ids_conjuntos = ambiente_crud.obter_conjuntos_do_ambiente(db, ambiente.id_amb)
+    totais = ambiente_crud.obter_totais_imagens_por_ambiente(db)
+    total_imagens = totais.get(ambiente.id_amb, 0)
     return {
         "message": "Ambiente reativado com sucesso.",
         "ambiente": AmbienteOut(
@@ -212,7 +220,8 @@ def reativar_ambiente_route(id_amb: str, admin: models.Usuario = Depends(require
             id_adm=str(ambiente.id_adm),
             nome_administrador=nome_adm,
             ativo=ambiente.ativo,
-            ids_conjuntos=ids_conjuntos
+            ids_conjuntos=ids_conjuntos,
+            total_imagens=total_imagens,
         )
     }
 
@@ -249,6 +258,8 @@ def atualizar_titulo_ambiente(
     
     nome_adm = ambiente.administrador.usuario.nome_completo if ambiente.administrador and ambiente.administrador.usuario else "(desconhecido)"
     ids_conjuntos = ambiente_crud.obter_conjuntos_do_ambiente(db, ambiente.id_amb)
+    totais = ambiente_crud.obter_totais_imagens_por_ambiente(db)
+    total_imagens = totais.get(ambiente.id_amb, 0)
     
     # Auditoria
     evento = db.query(EventoAuditoria).filter_by(nome="atualizar_titulo_ambiente").first()
@@ -271,7 +282,8 @@ def atualizar_titulo_ambiente(
         id_adm=str(ambiente.id_adm),
         nome_administrador=nome_adm,
         ativo=ambiente.ativo,
-        ids_conjuntos=ids_conjuntos
+        ids_conjuntos=ids_conjuntos,
+        total_imagens=total_imagens,
     )
 
 
@@ -306,6 +318,8 @@ def atualizar_descricao_questionario(
     
     nome_adm = ambiente.administrador.usuario.nome_completo if ambiente.administrador and ambiente.administrador.usuario else "(desconhecido)"
     ids_conjuntos = ambiente_crud.obter_conjuntos_do_ambiente(db, ambiente.id_amb)
+    totais = ambiente_crud.obter_totais_imagens_por_ambiente(db)
+    total_imagens = totais.get(ambiente.id_amb, 0)
     
     # Auditoria
     evento = db.query(EventoAuditoria).filter_by(nome="atualizar_descricao_questionario").first()
@@ -328,7 +342,8 @@ def atualizar_descricao_questionario(
         id_adm=str(ambiente.id_adm),
         nome_administrador=nome_adm,
         ativo=ambiente.ativo,
-        ids_conjuntos=ids_conjuntos
+        ids_conjuntos=ids_conjuntos,
+        total_imagens=total_imagens,
     )
 
 
@@ -364,6 +379,8 @@ def atualizar_titulo_questionario(
     
     nome_adm = ambiente.administrador.usuario.nome_completo if ambiente.administrador and ambiente.administrador.usuario else "(desconhecido)"
     ids_conjuntos = ambiente_crud.obter_conjuntos_do_ambiente(db, ambiente.id_amb)
+    totais = ambiente_crud.obter_totais_imagens_por_ambiente(db)
+    total_imagens = totais.get(ambiente.id_amb, 0)
     
     # Auditoria
     evento = db.query(EventoAuditoria).filter_by(nome="atualizar_titulo_questionario").first()
@@ -386,5 +403,6 @@ def atualizar_titulo_questionario(
         id_adm=str(ambiente.id_adm),
         nome_administrador=nome_adm,
         ativo=ambiente.ativo,
-        ids_conjuntos=ids_conjuntos
+        ids_conjuntos=ids_conjuntos,
+        total_imagens=total_imagens,
     ) 

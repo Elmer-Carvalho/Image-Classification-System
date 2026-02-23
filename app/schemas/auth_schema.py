@@ -161,6 +161,7 @@ class AmbienteOut(BaseModel):
     nome_administrador: str
     ativo: bool
     ids_conjuntos: Optional[list[str]] = None  # Lista de IDs de conjuntos associados (opcional na resposta)
+    total_imagens: int = Field(default=0, description="Total de imagens no ambiente (soma dos conjuntos associados, existe_no_nextcloud=True)")
 
     class Config:
         from_attributes = True
@@ -177,7 +178,8 @@ class AmbienteOut(BaseModel):
                 "ids_conjuntos": [
                     "a1b2c3d4-5678-1234-9abc-1234567890ab",
                     "b2c3d4e5-6789-2345-0bcd-2345678901bc"
-                ]
+                ],
+                "total_imagens": 42
             }
         } 
 

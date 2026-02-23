@@ -205,6 +205,9 @@ class Imagem(Base):
     garantindo identificação única e persistente mesmo se nome/caminho mudarem.
     """
     __tablename__ = 'imagens'
+    __table_args__ = (
+        Index('idx_imagem_id_cnj_existe', 'id_cnj', 'existe_no_nextcloud'),  # Consultas de contagem por conjunto/ambiente
+    )
     content_hash = Column(String(64), primary_key=True)  # SHA-256 do conteúdo binário (64 caracteres hexadecimais)
     nome_img = Column(String(255), nullable=False)  # Nome do arquivo no NextCloud (pode mudar se arquivo for renomeado)
     caminho_img = Column(String(255), nullable=False)  # Caminho completo do arquivo no NextCloud (pode mudar se arquivo for movido)
