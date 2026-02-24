@@ -4,8 +4,34 @@ from app.db import models
 from sqlalchemy.exc import IntegrityError
 from datetime import datetime, timezone
 from typing import List, Optional, Dict
+from app.db.models import Imagem, AmbienteConjuntoImagens, UsuarioAmbiente, Opcao
 import uuid
 
+def obter_imagens_preview_ambiente(db, id_amb: str, limit: int = 5):
+    """Retorna algumas imagens reais do ambiente para o Admin visualizar no Preview (mesmo inativo)"""
+    imagens = db.query(models.Imagem).join(
+        models.AmbienteConjuntoImagens, models.AmbienteConjuntoImagens.id_cnj == models.Imagem.id_cnj
+    ).filter(
+        models.AmbienteConjuntoImagens.id_amb == id_amb,
+        # REMOVIDO: AmbienteConjuntoImagens.ativo == True -> Permite ver preview de inativos
+        models.Imagem.existe_no_nextcloud == True
+    ).limit(limit).all()
+    return imagens
+
+def verificar_ambiente_possui_usuarios(db, id_amb: str) -> bool:
+    """Verifica se já tem algum especialista associado a este ambiente"""
+    count = db.query(UsuarioAmbiente).filter(UsuarioAmbiente.id_amb == id_amb).count()
+    return count > 0
+
+def substituir_opcoes_ambiente(db, id_amb: str, novas_opcoes: list):
+    """Deleta as opções antigas e insere as novas (pois a model bloqueia UPDATE do texto)"""
+    # 1. Apaga as antigas
+    db.query(Opcao).filter(Opcao.id_amb == id_amb).delete()
+    # 2. Cria as novas
+    for texto in novas_opcoes:
+        db.add(Opcao(id_amb=id_amb, texto=texto))
+    db.commit()
+    return True
 
 def criar_ambiente(db: Session, titulo_amb: str, titulo_questionario: Optional[str], descricao_questionario: str, id_adm, ids_conjuntos: List[str], opcoes: List[str]):
     """
@@ -266,8 +292,8 @@ def reativar_ambiente(db: Session, id_amb):
     
     return None
 
-
 def obter_conjuntos_do_ambiente(db: Session, id_amb):
+    """Retorna lista de IDs de conjuntos associados a um ambiente (histórico completo)."""
     """
     Retorna lista de IDs de conjuntos associados a um ambiente (apenas ativos).
     
@@ -284,14 +310,14 @@ def obter_conjuntos_do_ambiente(db: Session, id_amb):
         return []
     
     associacoes = db.query(models.AmbienteConjuntoImagens).filter(
-        models.AmbienteConjuntoImagens.id_amb == id_amb_uuid,
-        models.AmbienteConjuntoImagens.ativo == True
+        models.AmbienteConjuntoImagens.id_amb == id_amb_uuid
+        # REMOVIDO: models.AmbienteConjuntoImagens.ativo == True
     ).all()
     
     return [str(assoc.id_cnj) for assoc in associacoes]
 
-
 def obter_totais_imagens_por_ambiente(db: Session) -> Dict[uuid.UUID, int]:
+    """Retorna o total de imagens por ambiente, ignorando status ativo para manter contagem no histórico."""
     """
     Retorna o total de imagens por ambiente em uma única query.
     Considera apenas conjuntos ativamente associados ao ambiente e imagens
@@ -307,7 +333,7 @@ def obter_totais_imagens_por_ambiente(db: Session) -> Dict[uuid.UUID, int]:
         db.query(models.AmbienteConjuntoImagens.id_amb, func.count(models.Imagem.content_hash).label("total"))
         .join(models.Imagem, models.Imagem.id_cnj == models.AmbienteConjuntoImagens.id_cnj)
         .filter(
-            models.AmbienteConjuntoImagens.ativo == True,
+            # REMOVIDO: models.AmbienteConjuntoImagens.ativo == True
             models.Imagem.existe_no_nextcloud == True,
         )
         .group_by(models.AmbienteConjuntoImagens.id_amb)
