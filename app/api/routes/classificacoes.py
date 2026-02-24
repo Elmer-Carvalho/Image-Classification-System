@@ -34,6 +34,7 @@ class HistoricoItemOut(BaseModel):
     nome_img: str
     url_img: str
     opcao_escolhida: str
+    ids_opcoes: List[str]
     data_classificacao: datetime
     nome_ambiente: str
     id_amb: str
@@ -551,6 +552,7 @@ def listar_historico_usuario(
                 item_existente = grouped_items[imagem.content_hash]
                 if opcao.texto not in item_existente["opcoes_lista"]:
                     item_existente["opcoes_lista"].append(opcao.texto)
+                    item_existente["ids_opcoes"].append(str(opcao.id_opc))
             else:
                 path_limpo = imagem.caminho_img.lstrip('/')
                 url_img = f"/nextcloud/images/{quote(path_limpo, safe='/')}"
@@ -560,6 +562,7 @@ def listar_historico_usuario(
                     "nome_img": imagem.nome_img,
                     "url_img": url_img,
                     "opcoes_lista": [opcao.texto],
+                    "ids_opcoes": [str(opcao.id_opc)],
                     "data_classificacao": classificacao.data_criado,
                     "nome_ambiente": ambiente.titulo_amb,
                     "id_amb": final_id_amb

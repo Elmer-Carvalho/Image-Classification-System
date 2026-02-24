@@ -13,8 +13,73 @@ from app.crud import ambiente_crud
 from app.db import models
 from datetime import datetime, timezone
 from app.db.models import EventoAuditoria, LogAuditoria
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/ambientes", tags=["Ambientes"])
+
+# Schema para receber a lista de opções
+class AmbienteUpdateOpcoes(BaseModel):
+    opcoes: list[str]
+
+@router.get("/{id_amb}/preview-imagens")
+def preview_imagens_ambiente(
+    id_amb: str,
+    admin: models.Usuario = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """
+    Retorna até 5 imagens reais do ambiente ignorando o bloqueio de especialista.
+    Exclusivo para a funcionalidade de Preview do Admin.
+    """
+    imagens = ambiente_crud.obter_imagens_preview_ambiente(db, id_amb, limit=5)
+    
+    resultado = []
+    for img in imagens:
+        resultado.append({
+            "content_hash": img.content_hash,
+            "nome_img": img.nome_img,
+            "caminho_img": img.caminho_img,
+            "classificacao": None # Preview não tem classificação
+        })
+    return {"imagens": resultado}
+
+@router.patch("/{id_amb}/opcoes", status_code=200)
+def atualizar_opcoes_ambiente_route(
+    id_amb: str,
+    payload: AmbienteUpdateOpcoes = Body(...),
+    admin: models.Usuario = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """
+    Atualiza as opções de um ambiente APENAS se ele não tiver especialistas associados.
+    """
+    # 1. Verifica se tem pelo menos 2 opções
+    if len(payload.opcoes) < 2:
+        raise HTTPException(status_code=400, detail="O ambiente deve ter pelo menos 2 opções.")
+        
+    # 2. Verifica se a edição ainda é permitida (Trava de Segurança)
+    if ambiente_crud.verificar_ambiente_possui_usuarios(db, id_amb):
+        raise HTTPException(
+            status_code=403, 
+            detail="Não é possível editar opções: Este ambiente já possui especialistas vinculados."
+        )
+        
+    # 3. Substitui as opções no banco
+    ambiente_crud.substituir_opcoes_ambiente(db, id_amb, payload.opcoes)
+    
+    # 4. Registrar na Auditoria
+    evento = db.query(EventoAuditoria).filter_by(nome="atualizar_opcoes_ambiente").first()
+    if evento:
+        log = LogAuditoria(
+            id_usu=admin.id_usu,
+            evento_id=evento.id_evento,
+            data_evento=datetime.now(timezone.utc),
+            detalhes={"id_amb": id_amb, "novas_opcoes": payload.opcoes}
+        )
+        db.add(log)
+        db.commit()
+        
+    return {"message": "Opções atualizadas com sucesso!"}
 
 @router.post("/importar", response_model=AmbienteOut, status_code=201)
 def criar_ambiente(
