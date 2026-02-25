@@ -128,6 +128,7 @@ class AmbienteCreate(BaseModel):
     descricao_questionario: constr(strip_whitespace=True, min_length=3)
     opcoes: list[str] = Field(..., min_length=2, description="Lista de textos de opções (mínimo 2)")
     ids_conjuntos: list[str] = Field(..., min_length=1, description="Lista de IDs de ConjuntoImagens (mínimo 1)")
+    multipla_escolha: bool = False
 
     class Config:
         json_schema_extra = {
@@ -135,15 +136,9 @@ class AmbienteCreate(BaseModel):
                 "titulo_amb": "Ambiente de Teste",
                 "titulo_questionario": "Questionário de Classificação",
                 "descricao_questionario": "Descrição do questionário para testes e validações.",
-                "opcoes": [
-                    "Opção 1",
-                    "Opção 2",
-                    "Opção 3"
-                ],
-                "ids_conjuntos": [
-                    "a1b2c3d4-5678-1234-9abc-1234567890ab",
-                    "b2c3d4e5-6789-2345-0bcd-2345678901bc"
-                ]
+                "opcoes": ["Opção 1", "Opção 2", "Opção 3"],
+                "ids_conjuntos": ["a1b2c3d4-5678-1234-9abc-1234567890ab", "b2c3d4e5-6789-2345-0bcd-2345678901bc"],
+                "multipla_escolha": False
             }
         }
 
@@ -160,8 +155,9 @@ class AmbienteOut(BaseModel):
     id_adm: str
     nome_administrador: str
     ativo: bool
-    ids_conjuntos: Optional[list[str]] = None  # Lista de IDs de conjuntos associados (opcional na resposta)
+    ids_conjuntos: Optional[list[str]] = None  
     total_imagens: int = Field(default=0, description="Total de imagens no ambiente (soma dos conjuntos associados, existe_no_nextcloud=True)")
+    multipla_escolha: bool # <--- NOVA LINHA
 
     class Config:
         from_attributes = True
@@ -175,13 +171,11 @@ class AmbienteOut(BaseModel):
                 "id_adm": "b1e2c3d4-5678-1234-9abc-1234567890ab",
                 "nome_administrador": "Maria Admin",
                 "ativo": True,
-                "ids_conjuntos": [
-                    "a1b2c3d4-5678-1234-9abc-1234567890ab",
-                    "b2c3d4e5-6789-2345-0bcd-2345678901bc"
-                ],
-                "total_imagens": 42
+                "ids_conjuntos": ["a1b2c3d4-5678-1234-9abc-1234567890ab", "b2c3d4e5-6789-2345-0bcd-2345678901bc"],
+                "total_imagens": 42,
+                "multipla_escolha": False
             }
-        } 
+        }
 
 # Schemas para Usuario-Ambiente (novos)
 class UsuarioAmbienteAssociarIn(BaseModel):
@@ -209,6 +203,7 @@ class AmbienteInfoOut(BaseModel):
     ativo: bool
     total_imagens: int = Field(default=0, description="Total de imagens no ambiente")
     total_classificadas: int = Field(default=0, description="Total de imagens classificadas pelo usuário")
+    multipla_escolha: bool 
 
     class Config:
         from_attributes = True
