@@ -208,7 +208,7 @@ def listar_ambientes(
                 ativo=a.ativo,
                 ids_conjuntos=ids_conjuntos,
                 total_imagens=total_imagens,
-                multipla_escolha=a.multipla_escolha
+                multipla_escolha=a.multipla_escolha if a.multipla_escolha is not None else False
             )
         )
     return result
