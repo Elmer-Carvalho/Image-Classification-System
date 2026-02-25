@@ -33,7 +33,7 @@ def substituir_opcoes_ambiente(db, id_amb: str, novas_opcoes: list):
     db.commit()
     return True
 
-def criar_ambiente(db: Session, titulo_amb: str, titulo_questionario: Optional[str], descricao_questionario: str, id_adm, ids_conjuntos: List[str], opcoes: List[str]):
+def criar_ambiente(db: Session, titulo_amb: str, titulo_questionario: Optional[str], descricao_questionario: str, id_adm, ids_conjuntos: List[str], opcoes: List[str], multipla_escolha: bool = False):
     """
     Cria um novo ambiente, associa aos conjuntos de imagens e cria as opções.
     
@@ -95,6 +95,7 @@ def criar_ambiente(db: Session, titulo_amb: str, titulo_questionario: Optional[s
         titulo_amb=titulo_amb,
         titulo_questionario=titulo_questionario.strip() if titulo_questionario else None,
         descricao_questionario=descricao_questionario,
+        multipla_escolha=multipla_escolha,
         data_criado=datetime.now(timezone.utc),
         id_adm=id_adm,
         ativo=True

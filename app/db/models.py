@@ -76,6 +76,7 @@ class Ambiente(Base):
     progresso_usuarios = relationship('UsuarioAmbienteProgresso', back_populates='ambiente')
     ativo = Column(Boolean, nullable=False, default=True)  # Exclusão lógica por parte do administrador
     utilizavel = Column(Boolean, nullable=False, default=True)  # Indica se o ambiente está utilizável (todas as pastas existem no NextCloud)
+    multipla_escolha = Column(Boolean, default=False)
 
 class UsuarioAmbiente(Base):
     __tablename__ = 'usuarios_ambientes'

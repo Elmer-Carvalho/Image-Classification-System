@@ -130,7 +130,8 @@ def criar_ambiente(
         ambiente.descricao_questionario,
         admin.administrador.id_adm,
         ambiente.ids_conjuntos,
-        ambiente.opcoes
+        ambiente.opcoes,
+        ambiente.multipla_escolha
     )
     
     if not novo:
@@ -175,6 +176,7 @@ def criar_ambiente(
         ativo=novo.ativo,
         ids_conjuntos=ids_conjuntos_associados,
         total_imagens=total_imagens,
+        multipla_escolha=novo.multipla_escolha
     )
 
 @router.get("/", response_model=list[AmbienteOut])
@@ -206,6 +208,7 @@ def listar_ambientes(
                 ativo=a.ativo,
                 ids_conjuntos=ids_conjuntos,
                 total_imagens=total_imagens,
+                multipla_escolha=a.multipla_escolha
             )
         )
     return result

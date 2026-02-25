@@ -63,8 +63,9 @@ def listar_ambientes_usuario(db: Session, id_con: str) -> Optional[Tuple[models.
                     "titulo_amb": amb.titulo_amb,
                     "descricao_questionario": amb.descricao_questionario,
                     "ativo": amb.ativo,
-                    "total_imagens": total_imagens,        # Novo
-                    "total_classificadas": total_classificadas # Novo
+                    "total_imagens": total_imagens,        
+                    "total_classificadas": total_classificadas, 
+                    "multipla_escolha": amb.multipla_escolha 
                 })
     
     return usuario, ambientes
