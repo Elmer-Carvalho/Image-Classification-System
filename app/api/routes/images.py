@@ -3,6 +3,8 @@ Rotas para operações com imagens.
 """
 import hashlib
 import logging
+import time
+import threading
 from typing import List
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from sqlalchemy.orm import Session
@@ -13,6 +15,10 @@ from app.schemas.image_schema import RespostaBuscaImagens, ResultadoBuscaImagem,
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/images", tags=["Imagens"])
+
+_last_hash_request_time: float = 0.0
+_rate_limit_lock = threading.Lock()
+RATE_LIMIT_SECONDS = 2
 
 
 @router.post("/buscar-por-hash", response_model=RespostaBuscaImagens)
@@ -34,6 +40,18 @@ async def buscar_imagens_por_hash(
     
     - **Resposta**: Lista com informações das imagens correspondentes encontradas no banco
     """
+    global _last_hash_request_time
+    with _rate_limit_lock:
+        now = time.monotonic()
+        elapsed = now - _last_hash_request_time
+        if elapsed < RATE_LIMIT_SECONDS:
+            remaining = round(RATE_LIMIT_SECONDS - elapsed, 1)
+            raise HTTPException(
+                status_code=429,
+                detail=f"Rate limit atingido. Tente novamente em {remaining}s."
+            )
+        _last_hash_request_time = now
+
     if not files:
         raise HTTPException(
             status_code=400,

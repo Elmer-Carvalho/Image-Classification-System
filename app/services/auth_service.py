@@ -1,18 +1,15 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from app.core.config import settings
-from app.core.utils import verify_password
-from app.crud.user_crud import get_user_by_email
+from app.core.utils import verify_password, hash_password
+from app.crud.user_crud import get_user_by_email, get_user_by_id
 from sqlalchemy.orm import Session
 from app.db import models
 import logging
-from app.core.utils import verify_password, hash_password
 from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer
 from app.db.database import get_db
-from app.crud.user_crud import get_user_by_id
 
 # Configura logging
 logger = logging.getLogger(__name__)
@@ -73,15 +70,16 @@ def get_token_from_cookie_or_header(request: Request, token: Optional[str] = Non
     return None
 
 def get_current_user(request: Request, db: Session = Depends(get_db)):
-    # Chamamos a nossa função de extração manualmente
     actual_token = get_token_from_cookie_or_header(request)
     
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Not authenticated",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    
     if not actual_token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise credentials_exception
         
     try:
         payload = jwt.decode(actual_token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])

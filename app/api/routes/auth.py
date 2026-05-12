@@ -43,7 +43,7 @@ def set_auth_cookie(response: Response, access_token: str):
         # Navegadores exigem Secure=True quando SameSite=None
         samesite = "lax"
     response.set_cookie(
-        key="access_token",
+        key=settings.COOKIE_NAME,
         value=access_token,
         max_age=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         httponly=settings.COOKIE_HTTPONLY,
@@ -63,7 +63,7 @@ def set_auth_cookie(response: Response, access_token: str):
 def clear_auth_cookie(response: Response):
     """Remove o cookie de autenticação."""
     response.delete_cookie(
-        key="access_token",
+        key=settings.COOKIE_NAME,
         samesite=settings.COOKIE_SAMESITE or "lax",
         secure=settings.COOKIE_SECURE,
         domain=_cookie_domain_or_none(),
