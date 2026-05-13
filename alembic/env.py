@@ -16,7 +16,7 @@ from app.db import models  # noqa: F401 - garante que todos os modelos estão re
 config = context.config
 
 # Usar DATABASE_URL da aplicação (evita duplicar configuração)
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+config.set_main_option("sqlalchemy.url", settings.DATABASE_URL.replace("%", "%%"))
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
