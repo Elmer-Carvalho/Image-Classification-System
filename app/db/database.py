@@ -56,8 +56,7 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 # Create Base class
 Base = declarative_base()
 
-# O timezone do banco deve ser configurado para 'America/Sao_Paulo' diretamente no banco PostgreSQL.
-# Os modelos ORM usam DateTime(timezone=True) para garantir compatibilidade.
+# Os modelos ORM usam DateTime(timezone=True) para garantir compatibilidade com timezone.
 # Dependency to get database session
 def get_db():
     db = SessionLocal()

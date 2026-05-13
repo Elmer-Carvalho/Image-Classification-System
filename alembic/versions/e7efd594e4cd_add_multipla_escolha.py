@@ -19,9 +19,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Cria a coluna no banco de dados de produção
-    op.add_column('ambientes', sa.Column('multipla_escolha', sa.Boolean(), server_default='false', nullable=True))
+    op.add_column('ambientes', sa.Column('multipla_escolha', sa.Boolean(), server_default='0', nullable=True))
 
 def downgrade() -> None:
-    # Remove a coluna caso precise reverter
     op.drop_column('ambientes', 'multipla_escolha')

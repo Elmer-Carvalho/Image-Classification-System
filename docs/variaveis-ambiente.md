@@ -43,8 +43,8 @@ Criado automaticamente no primeiro startup se não existir usuário administrado
 
 | Variável | Descrição |
 |----------|-----------|
-| `DATABASE_URL` | URL de conexão PostgreSQL (ex.: `postgresql://user:password@host:5432/dbname`). Usada pela aplicação e pelo Alembic. |
-| `POSTGRES_*` | Variáveis auxiliares para o serviço PostgreSQL no Docker (POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB, POSTGRES_HOST, POSTGRES_PORT). O `docker-compose` pode montar `DATABASE_URL` a partir delas. |
+| `DATABASE_URL` | URL de conexão MySQL (ex.: `mysql+pymysql://user:password@host:3306/dbname?charset=utf8mb4`). Usada pela aplicação e pelo Alembic. |
+| `MYSQL_*` | Variáveis auxiliares para o serviço MySQL no Docker (`MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DATABASE`, `MYSQL_ROOT_PASSWORD`, `MYSQL_HOST`, `MYSQL_PORT`). O `docker-compose` pode montar `DATABASE_URL` a partir delas. |
 
 ### API
 
