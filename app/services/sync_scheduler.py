@@ -4,7 +4,7 @@ Agendador de tarefas de sincronização periódica com NextCloud.
 import threading
 import time
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone
 from typing import Optional
 
 from app.services.nextcloud_sync_service import NextCloudSyncService
@@ -105,6 +105,8 @@ class SyncScheduler:
                     if last_sync:
                         try:
                             last_sync_dt = datetime.fromisoformat(last_sync.replace('Z', '+00:00'))
+                            if last_sync_dt.tzinfo is None:
+                                last_sync_dt = last_sync_dt.replace(tzinfo=dt_timezone.utc)
                             time_since = local_to_utc(tz_now()) - last_sync_dt
                             time_since_minutes = time_since.total_seconds() / 60
                             
@@ -183,6 +185,8 @@ class SyncScheduler:
                     if last_sync:
                         try:
                             last_sync_dt = datetime.fromisoformat(last_sync.replace('Z', '+00:00'))
+                            if last_sync_dt.tzinfo is None:
+                                last_sync_dt = last_sync_dt.replace(tzinfo=dt_timezone.utc)
                             time_since = local_to_utc(tz_now()) - last_sync_dt
                             time_since_minutes = time_since.total_seconds() / 60
                             
