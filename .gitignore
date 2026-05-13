@@ -181,7 +181,7 @@ htmlcov/
 *.sqlite
 *.sqlite3
 
-# PostgreSQL
+# Database dumps
 *.sql
 *.dump
 
@@ -229,6 +229,7 @@ credentials.json
 *.yaml
 *.yml
 !docker-compose.yml
+!docker-compose.prod.yml
 
 # Backup files
 *.bak

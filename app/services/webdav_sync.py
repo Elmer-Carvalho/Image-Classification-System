@@ -201,7 +201,7 @@ class WebDAVSync:
         if not conjunto:
             # Criar novo conjunto
             conjunto = ConjuntoImagens(
-                id_cnj=uuid.uuid4(),
+                id_cnj=str(uuid.uuid4()),
                 nome_conj=folder_name,
                 caminho_conj=folder_path,
                 file_id=folder_file_id,

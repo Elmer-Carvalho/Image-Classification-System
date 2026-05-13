@@ -18,11 +18,11 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # IF NOT EXISTS para idempotência (ex.: create_all já criou o índice em dev)
     conn = op.get_bind()
-    conn.execute(sa.text(
-        "CREATE INDEX IF NOT EXISTS idx_imagem_id_cnj_existe ON imagens (id_cnj, existe_no_nextcloud)"
-    ))
+    inspector = sa.inspect(conn)
+    existing_indexes = [idx['name'] for idx in inspector.get_indexes('imagens')]
+    if 'idx_imagem_id_cnj_existe' not in existing_indexes:
+        op.create_index('idx_imagem_id_cnj_existe', 'imagens', ['id_cnj', 'existe_no_nextcloud'])
 
 
 def downgrade() -> None:

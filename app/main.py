@@ -72,55 +72,24 @@ async def lifespan(app: FastAPI):
     else:
         # Desenvolvimento: limpar banco e recriar do zero
         print(f"📊 Ambiente: DEVELOPMENT - Recriando banco de dados do zero...")
-        schema_dropped = False
         try:
-            # Primeiro, tentar remover constraints antigas com CASCADE usando SQL direto
             with engine.begin() as conn:
-                from sqlalchemy import text
-                # Remover todas as tabelas com CASCADE (drop schema e recria)
-                conn.execute(text("DROP SCHEMA IF EXISTS public CASCADE;"))
-                conn.execute(text("CREATE SCHEMA public;"))
-                # Obter o usuário atual do banco de dados
-                result = conn.execute(text("SELECT current_user;"))
-                current_user = result.scalar()
-                # Dar permissões ao usuário atual
-                conn.execute(text(f"GRANT ALL ON SCHEMA public TO {current_user};"))
-                conn.execute(text("GRANT ALL ON SCHEMA public TO public;"))
-            schema_dropped = True
-            print("✅ Schema público removido e recriado com sucesso!")
+                from sqlalchemy import text, inspect
+                conn.execute(text("SET FOREIGN_KEY_CHECKS = 0;"))
+                inspector = inspect(engine)
+                tables = inspector.get_table_names()
+                for table in tables:
+                    conn.execute(text(f"DROP TABLE IF EXISTS `{table}`;"))
+                conn.execute(text("SET FOREIGN_KEY_CHECKS = 1;"))
+            print("✅ Tabelas removidas com sucesso!")
         except Exception as e:
-            # Se falhar, tentar método padrão do SQLAlchemy com checkfirst=False
-            print(f"⚠️ Método CASCADE falhou, tentando método padrão: {e}")
+            print(f"⚠️ Erro ao dropar tabelas, tentando método padrão: {e}")
             try:
-                # Tentar dropar todas as tabelas, ignorando erros de dependências
-                with engine.begin() as conn:
-                    from sqlalchemy import text, inspect
-                    inspector = inspect(engine)
-                    # Listar todas as tabelas e dropar uma por uma com CASCADE
-                    tables = inspector.get_table_names()
-                    for table in tables:
-                        try:
-                            conn.execute(text(f"DROP TABLE IF EXISTS {table} CASCADE;"))
-                        except Exception:
-                            pass  # Ignorar erros individuais
                 Base.metadata.drop_all(bind=engine, checkfirst=False)
             except Exception as e2:
-                print(f"⚠️ Erro ao dropar tabelas: {e2}")
-                # Se ainda falhar, continuar e tentar criar (pode dar erro de tabela já existe)
-                pass
-        
-        # Criar todas as tabelas (apenas se o schema foi dropado ou se drop_all funcionou)
-        if schema_dropped:
-            # Schema já foi recriado, apenas criar as tabelas
-            Base.metadata.create_all(bind=engine)
-        else:
-            # Tentar criar mesmo assim (pode dar erro se tabelas ainda existirem)
-            try:
-                Base.metadata.create_all(bind=engine)
-            except Exception as e:
-                print(f"⚠️ Erro ao criar tabelas: {e}")
-                raise
-        
+                print(f"⚠️ Erro ao dropar tabelas (método padrão): {e2}")
+
+        Base.metadata.create_all(bind=engine)
         print("✅ Banco de dados recriado com sucesso!")
         # Marcar banco como atualizado (evita reaplicar migrações em dev)
         try:
@@ -157,7 +126,7 @@ async def lifespan(app: FastAPI):
             from datetime import datetime
             import uuid
             admin_user = Usuario(
-                id_usu=uuid.uuid4(),
+                id_usu=str(uuid.uuid4()),
                 nome_completo=settings.ADMIN_NOME_COMPLETO,
                 email=settings.ADMIN_EMAIL,
                 senha_hash=hash_password(settings.ADMIN_SENHA),
@@ -166,9 +135,9 @@ async def lifespan(app: FastAPI):
                 id_tipo=admin_tipo.id_tipo
             )
             session.add(admin_user)
-            session.flush()  # Garante que o usuário tenha ID para FK
+            session.flush()
             admin_adm = UsuarioAdministrador(
-                id_adm=uuid.uuid4(),
+                id_adm=str(uuid.uuid4()),
                 cpf=settings.ADMIN_CPF,
                 id_usu=admin_user.id_usu
             )

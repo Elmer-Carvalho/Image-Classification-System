@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     ENV: str = "development"  # "development" ou "production"
     
     # Database
-    DATABASE_URL: str = "postgresql://user:password@localhost:5432/image_classification"
+    DATABASE_URL: str = "mysql+pymysql://user:password@localhost:3306/image_classification?charset=utf8mb4"
     
     # API
     API_HOST: str = "0.0.0.0"

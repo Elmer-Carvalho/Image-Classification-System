@@ -599,7 +599,7 @@ class ActivityAPISync:
                 # Criar novo ConjuntoImagens
                 now = local_to_utc(tz_now())
                 conjunto = ConjuntoImagens(
-                    id_cnj=uuid.uuid4(),
+                    id_cnj=str(uuid.uuid4()),
                     nome_conj=folder_info.get('name', ''),
                     caminho_conj=folder_path,
                     file_id=folder_file_id,
@@ -820,7 +820,7 @@ class ActivityAPISync:
             
             if not conjunto:
                 conjunto = ConjuntoImagens(
-                    id_cnj=uuid.uuid4(),
+                    id_cnj=str(uuid.uuid4()),
                     nome_conj=folder_info.get('name', ''),
                     caminho_conj=folder_path,
                     file_id=folder_info.get('file_id', ''),

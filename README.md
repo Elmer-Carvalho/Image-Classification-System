@@ -19,7 +19,7 @@ Toda a documentação está na pasta **[docs/](docs/)**. Use os links abaixo par
 
 | Tópico | Descrição |
 |--------|------------|
-| [**Banco de dados**](docs/banco-de-dados.md) | PostgreSQL, comportamento por ambiente (`ENV`), configuração e troubleshooting. |
+| [**Banco de dados**](docs/banco-de-dados.md) | MySQL, comportamento por ambiente (`ENV`), configuração e troubleshooting. |
 | [**Migrações**](docs/migracoes.md) | Alembic: onde ficam, como rodam no startup, como criar novas migrações. |
 | [**Sincronização NextCloud**](docs/sincronizacao-nextcloud.md) | Activity API, WebDAV, variáveis de ambiente e comportamento em falhas. |
 | [**Variáveis de ambiente**](docs/variaveis-ambiente.md) | Referência de todas as variáveis (ENV, JWT, cookie, banco, API, NextCloud, timezone). |
@@ -36,7 +36,7 @@ Toda a documentação está na pasta **[docs/](docs/)**. Use os links abaixo par
 
 ## 🔧 Troubleshooting
 
-- **Banco não conecta:** verifique se o PostgreSQL está rodando (`docker-compose ps`) e os logs (`docker-compose logs postgres`, `docker-compose logs app`). Reinicie com `docker-compose down` e `docker-compose up --build`.
+- **Banco não conecta:** verifique se o MySQL está rodando (`docker-compose ps`) e os logs (`docker-compose logs mysql`, `docker-compose logs app`). Reinicie com `docker-compose down` e `docker-compose up --build`.
 - **Tabelas não criadas / schema desatualizado:** em produção, confirme `ENV=production` no `.env` e veja os logs da aplicação (mensagens de migração Alembic). Detalhes em [Banco de dados](docs/banco-de-dados.md).
 
 ---

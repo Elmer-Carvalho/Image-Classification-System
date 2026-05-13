@@ -18,31 +18,29 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Tabela sync_status é criada por create_all() antes desta migração.
-    # ADD COLUMN IF NOT EXISTS evita erro se a coluna já existir (ex.: create_all já criou com schema atual).
     conn = op.get_bind()
-    # Só alterar se a tabela existir (em primeiro deploy create_all pode ainda não ter rodado na ordem esperada)
     result = conn.execute(sa.text(
-        "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'sync_status')"
+        "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'sync_status'"
     ))
     if not result.scalar():
-        return  # Tabela não existe; create_all vai criá-la com schema completo
-    conn.execute(sa.text("""
-        ALTER TABLE sync_status
-        ADD COLUMN IF NOT EXISTS webdav_failures INTEGER NOT NULL DEFAULT 0
-    """))
-    conn.execute(sa.text("""
-        ALTER TABLE sync_status
-        ADD COLUMN IF NOT EXISTS server_offline BOOLEAN NOT NULL DEFAULT FALSE
-    """))
-    conn.execute(sa.text("""
-        ALTER TABLE sync_status
-        ADD COLUMN IF NOT EXISTS last_health_check TIMESTAMP WITH TIME ZONE
-    """))
+        return
+    inspector = sa.inspect(conn)
+    existing_columns = [c['name'] for c in inspector.get_columns('sync_status')]
+    if 'webdav_failures' not in existing_columns:
+        op.add_column('sync_status', sa.Column('webdav_failures', sa.Integer(), nullable=False, server_default='0'))
+    if 'server_offline' not in existing_columns:
+        op.add_column('sync_status', sa.Column('server_offline', sa.Boolean(), nullable=False, server_default='0'))
+    if 'last_health_check' not in existing_columns:
+        op.add_column('sync_status', sa.Column('last_health_check', sa.DateTime(), nullable=True))
 
 
 def downgrade() -> None:
     conn = op.get_bind()
-    conn.execute(sa.text("ALTER TABLE sync_status DROP COLUMN IF EXISTS last_health_check"))
-    conn.execute(sa.text("ALTER TABLE sync_status DROP COLUMN IF EXISTS server_offline"))
-    conn.execute(sa.text("ALTER TABLE sync_status DROP COLUMN IF EXISTS webdav_failures"))
+    inspector = sa.inspect(conn)
+    existing_columns = [c['name'] for c in inspector.get_columns('sync_status')]
+    if 'last_health_check' in existing_columns:
+        op.drop_column('sync_status', 'last_health_check')
+    if 'server_offline' in existing_columns:
+        op.drop_column('sync_status', 'server_offline')
+    if 'webdav_failures' in existing_columns:
+        op.drop_column('sync_status', 'webdav_failures')
