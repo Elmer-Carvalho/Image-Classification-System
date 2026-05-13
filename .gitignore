@@ -229,6 +229,7 @@ credentials.json
 *.yaml
 *.yml
 !docker-compose.yml
+!docker-compose.prod.yml
 
 # Backup files
 *.bak
