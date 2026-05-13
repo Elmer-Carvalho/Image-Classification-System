@@ -3,7 +3,7 @@ Serviço principal de sincronização híbrida com NextCloud.
 Orquestra sincronização via Activity API e WebDAV (fallback).
 """
 import threading
-from datetime import timedelta
+from datetime import timedelta, timezone as dt_timezone
 from typing import Callable, Dict, Optional
 from sqlalchemy.orm import Session
 import logging
@@ -353,6 +353,8 @@ class NextCloudSyncService:
             # Verificar se já passou tempo suficiente desde última sync WebDAV
             if status.last_webdav_sync:
                 last_webdav = status.last_webdav_sync
+                if last_webdav.tzinfo is None:
+                    last_webdav = last_webdav.replace(tzinfo=dt_timezone.utc)
                 interval_minutes = settings.NEXTCLOUD_SYNC_WEBDAV_INTERVAL
                 if local_to_utc(tz_now()) - last_webdav < timedelta(minutes=interval_minutes):
                     return False  # Ainda não é hora de sync WebDAV
@@ -361,6 +363,8 @@ class NextCloudSyncService:
         # Se Activity API está disponível, verificar última sync
         if status.last_activity_api_sync:
             last_activity = status.last_activity_api_sync
+            if last_activity.tzinfo is None:
+                last_activity = last_activity.replace(tzinfo=dt_timezone.utc)
             interval_minutes = settings.NEXTCLOUD_SYNC_ACTIVITY_API_INTERVAL
             if local_to_utc(tz_now()) - last_activity < timedelta(minutes=interval_minutes):
                 return False  # Ainda não é hora de sync Activity API
