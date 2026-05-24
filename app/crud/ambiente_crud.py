@@ -66,6 +66,7 @@ def criar_ambiente(db: Session, titulo_amb: str, titulo_questionario: Optional[s
     
     # Se após validação tiver menos de 2 opções válidas, retornar erro
     if len(opcoes_validas) < 2:
+        print(f"[CRIAR_AMBIENTE] FALHA: menos de 2 opções válidas após limpeza. opcoes_validas={opcoes_validas}")
         return None, []
     
     # Remover duplicatas mantendo ordem
@@ -75,8 +76,8 @@ def criar_ambiente(db: Session, titulo_amb: str, titulo_questionario: Optional[s
     # Validar que todos os IDs de conjuntos existem no banco (em uma única query)
     try:
         ids_uuid = [uuid.UUID(id_cnj) for id_cnj in ids_conjuntos_unicos]
-    except ValueError:
-        # IDs inválidos (não são UUIDs válidos)
+    except ValueError as e:
+        print(f"[CRIAR_AMBIENTE] FALHA: UUID inválido nos ids_conjuntos. Erro: {e}, ids={ids_conjuntos_unicos}")
         return None, []
     
     conjuntos_validos = db.query(models.ConjuntoImagens).filter(
@@ -86,8 +87,16 @@ def criar_ambiente(db: Session, titulo_amb: str, titulo_questionario: Optional[s
     ids_validos_encontrados = {str(cnj.id_cnj) for cnj in conjuntos_validos}
     ids_solicitados = set(ids_conjuntos_unicos)
     
+    # DEBUG: Log de diagnóstico temporário
+    print(f"[CRIAR_AMBIENTE] ids_solicitados={ids_solicitados}")
+    print(f"[CRIAR_AMBIENTE] ids_encontrados={ids_validos_encontrados}")
+    print(f"[CRIAR_AMBIENTE] match={ids_validos_encontrados == ids_solicitados}")
+    print(f"[CRIAR_AMBIENTE] opcoes_unicas={opcoes_unicas}")
+    print(f"[CRIAR_AMBIENTE] id_adm={id_adm}")
+
     # Se algum ID não foi encontrado, retornar erro
     if ids_validos_encontrados != ids_solicitados:
+        print(f"[CRIAR_AMBIENTE] FALHA: IDs não coincidem. Diferença: solicitados-encontrados={ids_solicitados - ids_validos_encontrados}, encontrados-solicitados={ids_validos_encontrados - ids_solicitados}")
         return None, []
     
     # Criar ambiente
@@ -138,10 +147,12 @@ def criar_ambiente(db: Session, titulo_amb: str, titulo_questionario: Optional[s
         db.commit()
         db.refresh(novo)
         return novo, ids_conjuntos_unicos
-    except IntegrityError:
+    except IntegrityError as e:
+        print(f"[CRIAR_AMBIENTE] IntegrityError: {e}")
         db.rollback()
         return None, []
     except Exception as e:
+        print(f"[CRIAR_AMBIENTE] Exception inesperada: {type(e).__name__}: {e}")
         db.rollback()
         return None, []
 
