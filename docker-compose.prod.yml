@@ -6,6 +6,7 @@ services:
     container_name: image_classification_app
     network_mode: host
     environment:
+      - PYTHONUNBUFFERED=1
       - ENV=${ENV:-production}
       - DATABASE_URL=${DATABASE_URL}
       - API_HOST=${API_HOST:-0.0.0.0}
