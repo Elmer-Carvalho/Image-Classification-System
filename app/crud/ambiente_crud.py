@@ -73,15 +73,17 @@ def criar_ambiente(db: Session, titulo_amb: str, titulo_questionario: Optional[s
     ids_conjuntos_unicos = list(dict.fromkeys(ids_conjuntos))
     opcoes_unicas = list(dict.fromkeys(opcoes_validas))
     
-    # Validar que todos os IDs de conjuntos existem no banco (em uma única query)
+    # Validar que todos os IDs de conjuntos são UUIDs válidos
     try:
-        ids_uuid = [uuid.UUID(id_cnj) for id_cnj in ids_conjuntos_unicos]
+        # Valida formato UUID e normaliza para string lowercase com hífens
+        ids_validados = [str(uuid.UUID(id_cnj)) for id_cnj in ids_conjuntos_unicos]
     except ValueError as e:
         print(f"[CRIAR_AMBIENTE] FALHA: UUID inválido nos ids_conjuntos. Erro: {e}, ids={ids_conjuntos_unicos}")
         return None, []
     
+    # Usar strings (não objetos UUID) para compatibilidade com MariaDB CHAR(36)
     conjuntos_validos = db.query(models.ConjuntoImagens).filter(
-        models.ConjuntoImagens.id_cnj.in_(ids_uuid)
+        models.ConjuntoImagens.id_cnj.in_(ids_validados)
     ).all()
     
     ids_validos_encontrados = {str(cnj.id_cnj) for cnj in conjuntos_validos}
@@ -116,10 +118,10 @@ def criar_ambiente(db: Session, titulo_amb: str, titulo_questionario: Optional[s
         data_associado = datetime.now(timezone.utc)
         
         # Criar associações na tabela auxiliar
-        for id_cnj_uuid in ids_uuid:
+        for id_cnj_str in ids_validados:
             associacao = models.AmbienteConjuntoImagens(
                 id_amb=novo.id_amb,
-                id_cnj=id_cnj_uuid,
+                id_cnj=id_cnj_str,
                 data_associado=data_associado,
                 ativo=True
             )
