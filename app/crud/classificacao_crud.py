@@ -25,8 +25,8 @@ def obter_progresso_usuario(db: Session, id_con: str, id_amb: str) -> Optional[m
         Objeto UsuarioAmbienteProgresso
     """
     try:
-        id_con_uuid = uuid.UUID(id_con) if isinstance(id_con, str) else id_con
-        id_amb_uuid = uuid.UUID(id_amb) if isinstance(id_amb, str) else id_amb
+        id_con_uuid = str(uuid.UUID(id_con)) if isinstance(id_con, str) else str(id_con)
+        id_amb_uuid = str(uuid.UUID(id_amb)) if isinstance(id_amb, str) else str(id_amb)
     except (ValueError, TypeError):
         return None
     
@@ -64,7 +64,7 @@ def buscar_conjuntos_ambiente(db: Session, id_amb: str) -> List[uuid.UUID]:
         Lista de UUIDs dos conjuntos
     """
     try:
-        id_amb_uuid = uuid.UUID(id_amb) if isinstance(id_amb, str) else id_amb
+        id_amb_uuid = str(uuid.UUID(id_amb)) if isinstance(id_amb, str) else str(id_amb)
     except (ValueError, TypeError):
         return []
     
@@ -95,7 +95,7 @@ def buscar_imagens_inicial(
         Tupla (lista_imagens, tem_mais)
     """
     try:
-        id_con_uuid = uuid.UUID(id_con) if isinstance(id_con, str) else id_con
+        id_con_uuid = str(uuid.UUID(id_con)) if isinstance(id_con, str) else str(id_con)
     except (ValueError, TypeError):
         return [], False
     
@@ -174,7 +174,7 @@ def buscar_imagens_avancar(
         Tupla (lista_imagens, tem_mais)
     """
     try:
-        id_con_uuid = uuid.UUID(id_con) if isinstance(id_con, str) else id_con
+        id_con_uuid = str(uuid.UUID(id_con)) if isinstance(id_con, str) else str(id_con)
     except (ValueError, TypeError):
         return [], False
     
@@ -237,7 +237,7 @@ def buscar_imagens_voltar(
         Tupla (lista_imagens, tem_mais)
     """
     try:
-        id_con_uuid = uuid.UUID(id_con) if isinstance(id_con, str) else id_con
+        id_con_uuid = str(uuid.UUID(id_con)) if isinstance(id_con, str) else str(id_con)
     except (ValueError, TypeError):
         return [], False
     
@@ -298,7 +298,7 @@ def obter_classificacoes_imagens(
         Dicionário {content_hash: List[Classificacao]} - Lista de classificações por imagem
     """
     try:
-        id_con_uuid = uuid.UUID(id_con) if isinstance(id_con, str) else id_con
+        id_con_uuid = str(uuid.UUID(id_con)) if isinstance(id_con, str) else str(id_con)
     except (ValueError, TypeError):
         return {}
     
@@ -338,8 +338,8 @@ def criar_ou_atualizar_classificacao(
     try:
         # Converter IDs com segurança
         try:
-            id_con_uuid = uuid.UUID(id_con) if isinstance(id_con, str) else id_con
-            id_amb_uuid = uuid.UUID(id_amb) if isinstance(id_amb, str) else id_amb
+            id_con_uuid = str(uuid.UUID(id_con)) if isinstance(id_con, str) else str(id_con)
+            id_amb_uuid = str(uuid.UUID(id_amb)) if isinstance(id_amb, str) else str(id_amb)
         except ValueError as e:
             logger.error(f"Erro na conversão de UUID do usuário/ambiente: {e}")
             return [], 0
@@ -348,7 +348,7 @@ def criar_ou_atualizar_classificacao(
         id_opc_uuids = []
         for opc_id in id_opc:
             try:
-                opc_uuid = uuid.UUID(opc_id) if isinstance(opc_id, str) else opc_id
+                opc_uuid = str(uuid.UUID(opc_id)) if isinstance(opc_id, str) else str(opc_id)
                 id_opc_uuids.append(opc_uuid)
             except ValueError:
                 logger.warning(f"ID de opção inválido recebido: {opc_id}")

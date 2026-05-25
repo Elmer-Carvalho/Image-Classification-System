@@ -136,8 +136,8 @@ def _verificar_acesso_ambiente(db: Session, id_con: str, id_amb: str) -> bool:
         True se tem acesso, False caso contrário
     """
     try:
-        id_con_uuid = uuid.UUID(id_con) if isinstance(id_con, str) else id_con
-        id_amb_uuid = uuid.UUID(id_amb) if isinstance(id_amb, str) else id_amb
+        id_con_uuid = str(uuid.UUID(id_con)) if isinstance(id_con, str) else str(id_con)
+        id_amb_uuid = str(uuid.UUID(id_amb)) if isinstance(id_amb, str) else str(id_amb)
     except (ValueError, TypeError):
         return False
     
@@ -441,7 +441,7 @@ def obter_classificacoes_imagem(
         
         # Converter id_con para UUID
         try:
-            id_con_uuid = uuid.UUID(id_con_str) if isinstance(id_con_str, str) else id_con_str
+            id_con_uuid = str(uuid.UUID(id_con_str)) if isinstance(id_con_str, str) else str(id_con_str)
         except (ValueError, TypeError):
             raise HTTPException(
                 status_code=400,

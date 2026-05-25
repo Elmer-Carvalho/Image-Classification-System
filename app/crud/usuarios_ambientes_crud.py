@@ -17,7 +17,7 @@ def listar_ambientes_usuario(db: Session, id_con: str) -> Optional[Tuple[models.
     Lista ambientes do usuário com contagem de progresso.
     """
     try:
-        id_con_uuid = uuid.UUID(id_con) if isinstance(id_con, str) else id_con
+        id_con_uuid = str(uuid.UUID(id_con)) if isinstance(id_con, str) else str(id_con)
     except (ValueError, TypeError):
         return None, []
     
@@ -97,8 +97,8 @@ def criar_associacoes(db: Session, id_amb: str, ids_usuarios: List[str]) -> Tupl
     ids_usuarios_unicos = list(dict.fromkeys(ids_usuarios))
     
     try:
-        id_amb_uuid = uuid.UUID(id_amb) if isinstance(id_amb, str) else id_amb
-        ids_usuarios_uuid = [uuid.UUID(id_con) for id_con in ids_usuarios_unicos]
+        id_amb_uuid = str(uuid.UUID(id_amb)) if isinstance(id_amb, str) else str(id_amb)
+        ids_usuarios_uuid = [str(uuid.UUID(id_con)) for id_con in ids_usuarios_unicos]
     except ValueError:
         return None, []
     
@@ -178,7 +178,7 @@ def associar_todos_usuarios_ao_ambiente(db: Session, id_amb: str) -> Optional[in
         Número de usuários associados ou None se ambiente não encontrado
     """
     try:
-        id_amb_uuid = uuid.UUID(id_amb) if isinstance(id_amb, str) else id_amb
+        id_amb_uuid = str(uuid.UUID(id_amb)) if isinstance(id_amb, str) else str(id_amb)
     except (ValueError, TypeError):
         return None
     
@@ -247,8 +247,8 @@ def excluir_associacao(db: Session, id_con: str, id_amb: str) -> Optional[models
         Associação excluída ou None se não encontrada
     """
     try:
-        id_con_uuid = uuid.UUID(id_con) if isinstance(id_con, str) else id_con
-        id_amb_uuid = uuid.UUID(id_amb) if isinstance(id_amb, str) else id_amb
+        id_con_uuid = str(uuid.UUID(id_con)) if isinstance(id_con, str) else str(id_con)
+        id_amb_uuid = str(uuid.UUID(id_amb)) if isinstance(id_amb, str) else str(id_amb)
     except (ValueError, TypeError):
         return None
     
@@ -284,8 +284,8 @@ def reativar_associacao(db: Session, id_con: str, id_amb: str) -> Optional[model
         Associação reativada ou None se não encontrada ou não puder ser reativada
     """
     try:
-        id_con_uuid = uuid.UUID(id_con) if isinstance(id_con, str) else id_con
-        id_amb_uuid = uuid.UUID(id_amb) if isinstance(id_amb, str) else id_amb
+        id_con_uuid = str(uuid.UUID(id_con)) if isinstance(id_con, str) else str(id_con)
+        id_amb_uuid = str(uuid.UUID(id_amb)) if isinstance(id_amb, str) else str(id_amb)
     except (ValueError, TypeError):
         return None
     
@@ -336,8 +336,8 @@ def obter_associacao_por_ids(db: Session, id_con: str, id_amb: str) -> Optional[
         Associação ou None se não encontrada
     """
     try:
-        id_con_uuid = uuid.UUID(id_con) if isinstance(id_con, str) else id_con
-        id_amb_uuid = uuid.UUID(id_amb) if isinstance(id_amb, str) else id_amb
+        id_con_uuid = str(uuid.UUID(id_con)) if isinstance(id_con, str) else str(id_con)
+        id_amb_uuid = str(uuid.UUID(id_amb)) if isinstance(id_amb, str) else str(id_amb)
     except (ValueError, TypeError):
         return None
     
@@ -359,7 +359,7 @@ def listar_usuarios_do_ambiente(db: Session, id_amb: str) -> Optional[Tuple[mode
         Tupla (ambiente, lista_usuarios) ou (None, []) se ambiente não encontrado
     """
     try:
-        id_amb_uuid = uuid.UUID(id_amb) if isinstance(id_amb, str) else id_amb
+        id_amb_uuid = str(uuid.UUID(id_amb)) if isinstance(id_amb, str) else str(id_amb)
     except (ValueError, TypeError):
         return None, []
     

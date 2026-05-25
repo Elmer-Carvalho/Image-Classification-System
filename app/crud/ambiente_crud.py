@@ -172,7 +172,7 @@ def buscar_ambiente_por_titulo(db: Session, titulo_amb: str):
 def buscar_ambiente_por_id(db: Session, id_amb):
     """Busca ambiente por ID."""
     try:
-        id_amb_uuid = uuid.UUID(id_amb) if isinstance(id_amb, str) else id_amb
+        id_amb_uuid = str(uuid.UUID(id_amb)) if isinstance(id_amb, str) else str(id_amb)
         return db.query(models.Ambiente).filter(models.Ambiente.id_amb == id_amb_uuid).first()
     except (ValueError, TypeError):
         return None
@@ -190,7 +190,7 @@ def excluir_ambiente(db: Session, id_amb):
         Ambiente excluído ou None se não encontrado
     """
     try:
-        id_amb_uuid = uuid.UUID(id_amb) if isinstance(id_amb, str) else id_amb
+        id_amb_uuid = str(uuid.UUID(id_amb)) if isinstance(id_amb, str) else str(id_amb)
     except (ValueError, TypeError):
         return None
     
@@ -242,7 +242,7 @@ def reativar_ambiente(db: Session, id_amb):
         Ambiente reativado ou None se não encontrado ou se não foi possível reativar
     """
     try:
-        id_amb_uuid = uuid.UUID(id_amb) if isinstance(id_amb, str) else id_amb
+        id_amb_uuid = str(uuid.UUID(id_amb)) if isinstance(id_amb, str) else str(id_amb)
     except (ValueError, TypeError):
         return None
     
@@ -319,7 +319,7 @@ def obter_conjuntos_do_ambiente(db: Session, id_amb):
         Lista de IDs de conjuntos (strings)
     """
     try:
-        id_amb_uuid = uuid.UUID(id_amb) if isinstance(id_amb, str) else id_amb
+        id_amb_uuid = str(uuid.UUID(id_amb)) if isinstance(id_amb, str) else str(id_amb)
     except (ValueError, TypeError):
         return []
     
@@ -380,7 +380,7 @@ def atualizar_titulo_ambiente(db: Session, id_amb: str, novo_titulo: str) -> Opt
         return None
     
     try:
-        id_amb_uuid = uuid.UUID(id_amb) if isinstance(id_amb, str) else id_amb
+        id_amb_uuid = str(uuid.UUID(id_amb)) if isinstance(id_amb, str) else str(id_amb)
     except (ValueError, TypeError):
         return None
     
@@ -437,7 +437,7 @@ def atualizar_descricao_questionario(db: Session, id_amb: str, nova_descricao: s
         return None
     
     try:
-        id_amb_uuid = uuid.UUID(id_amb) if isinstance(id_amb, str) else id_amb
+        id_amb_uuid = str(uuid.UUID(id_amb)) if isinstance(id_amb, str) else str(id_amb)
     except (ValueError, TypeError):
         return None
     
@@ -486,7 +486,7 @@ def atualizar_titulo_questionario(db: Session, id_amb: str, novo_titulo: Optiona
             titulo_limpo = titulo_temp
     
     try:
-        id_amb_uuid = uuid.UUID(id_amb) if isinstance(id_amb, str) else id_amb
+        id_amb_uuid = str(uuid.UUID(id_amb)) if isinstance(id_amb, str) else str(id_amb)
     except (ValueError, TypeError):
         return None
     

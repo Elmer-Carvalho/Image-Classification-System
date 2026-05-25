@@ -36,7 +36,7 @@ def criar_opcao(db: Session, id_amb: str, texto: str) -> Optional[models.Opcao]:
         return None
     
     try:
-        id_amb_uuid = uuid.UUID(id_amb) if isinstance(id_amb, str) else id_amb
+        id_amb_uuid = str(uuid.UUID(id_amb)) if isinstance(id_amb, str) else str(id_amb)
     except (ValueError, TypeError):
         return None
     
@@ -90,7 +90,7 @@ def listar_opcoes_ambiente(db: Session, id_amb: str) -> Optional[tuple[models.Am
         Tupla (ambiente, lista_opcoes) ou (None, []) se ambiente não encontrado
     """
     try:
-        id_amb_uuid = uuid.UUID(id_amb) if isinstance(id_amb, str) else id_amb
+        id_amb_uuid = str(uuid.UUID(id_amb)) if isinstance(id_amb, str) else str(id_amb)
     except (ValueError, TypeError):
         return None, []
     
@@ -117,7 +117,7 @@ def buscar_opcao_por_id(db: Session, id_opc: str) -> Optional[models.Opcao]:
         Opção ou None se não encontrada
     """
     try:
-        id_opc_uuid = uuid.UUID(id_opc) if isinstance(id_opc, str) else id_opc
+        id_opc_uuid = str(uuid.UUID(id_opc)) if isinstance(id_opc, str) else str(id_opc)
     except (ValueError, TypeError):
         return None
     
